@@ -259,8 +259,8 @@ if "jansunwai_df" not in st.session_state:
 if module == "📊 Time Limit (TL) Letters & Office Tiles":
   st.header("📊 Department & Office-wise TL Performance Analytics")
   st.markdown(
-      "Filter cases by date and view comprehensive office-wise analytical"
-      " tiles with interactive drill-down."
+      "Filter cases by date and view office performance with direct"
+      " click-to-view case grids."
   )
 
   if role == "Admin":
@@ -301,7 +301,6 @@ if module == "📊 Time Limit (TL) Letters & Office Tiles":
       office_col = col_cand
       break
 
-  # dayfirst=True के साथ तारीख पार्सिंग
   if "Marked Date" in df.columns and office_col:
     df["Parsed_Marked_Date"] = pd.to_datetime(
         df["Marked Date"], errors="coerce", dayfirst=True
@@ -313,7 +312,7 @@ if module == "📊 Time Limit (TL) Letters & Office Tiles":
   else:
     filtered_df = df
 
-  # --- STRICT STATUS & DRILL-DOWN LOGIC FLAGS ---
+  # --- STATUS & LIFE-CYCLE PARSING ---
   if office_col:
     status_series = (
         filtered_df["Status"].astype(str).str.strip()
@@ -395,32 +394,17 @@ if module == "📊 Time Limit (TL) Letters & Office Tiles":
       "🏢 Office-wise Analytics Tiles (कार्यालय-वार विश्लेषणात्मक टाइल्स)"
   )
   st.markdown(
-      "*नीचे दिए गए कार्यालयों में से किसी भी विभाग का चयन करके उसके विशिष्ट मामलों"
-      " की ग्रिड देखें:*"
+      "*प्रत्येक कार्यालय की टाइल के नीचे दिए गए बटन्स पर क्लिक करके सीधे उनके"
+      " विशिष्ट मामलों की ग्रिड देखें:*"
   )
 
-  # --- INTERACTIVE DRILL-DOWN SELECTOR ---
-  if office_col and not office_summary.empty:
-    # ऑफिस चुनने के लिए ड्रॉपडाउन और किस प्रकार का केस देखना है उसका चयन
-    col_sel1, col_sel2 = st.columns(2)
-    with col_sel1:
-      selected_office = st.selectbox(
-          "🏢 Select Department / Office for Drill-down",
-          ["-- Select Office --"] + list(office_summary[office_col].unique()),
-      )
-    with col_sel2:
-      selected_category = st.selectbox(
-          "📂 Select Case Category",
-          [
-              "All Cases",
-              "Disposed",
-              "Replied",
-              "Not Replied",
-              "Time Limit Over (TL Over)",
-          ],
-      )
+  # Session state initialization for drill-down tracking
+  if "active_drill_office" not in st.session_state:
+    st.session_state.active_drill_office = None
+  if "active_drill_cat" not in st.session_state:
+    st.session_state.active_drill_cat = None
 
-    # ऑफिस-वाइज टाइल्स का डिस्प्ले
+  if office_col and not office_summary.empty:
     num_cols = 3
     rows = [
         office_summary.iloc[i : i + num_cols]
@@ -441,46 +425,65 @@ if module == "📊 Time Limit (TL) Letters & Office Tiles":
           border_color = "red" if oot > 0 or not_rep > 0 else "#2ecc71"
           st.markdown(
               f"""
-                    <div style="padding: 15px; border-radius: 8px; border: 2px solid {border_color}; margin-bottom: 15px;">
-                        <h4 style="margin: 0; font-size: 16px;">{off_name}</h4>
-                        <hr style="margin: 5px 0 8px 0; border-color: #888;">
-                        <p style="margin: 2px 0; font-size: 13px;">📦 Total Cases: <b>{tot}</b></p>
-                        <p style="margin: 2px 0; color: #2ecc71; font-size: 13px;">🎯 Disposed: <b>{disp}</b></p>
-                        <p style="margin: 2px 0; color: #3498db; font-size: 13px;">✅ Replied: <b>{rep}</b></p>
-                        <p style="margin: 2px 0; color: #e74c3c; font-size: 13px;">✉️ Not Replied: <b>{not_rep}</b></p>
-                        <p style="margin: 2px 0; color: {'#ff4b4b' if oot > 0 else '#2ecc71'}; font-size: 13px;">🚨 TL Over: <b>{oot}</b></p>
+                    <div style="padding: 12px; border-radius: 8px; border: 2px solid {border_color}; margin-bottom: 5px;">
+                        <h4 style="margin: 0; font-size: 15px;">{off_name}</h4>
+                        <hr style="margin: 4px 0 6px 0; border-color: #888;">
+                        <p style="margin: 2px 0; font-size: 12px;">📦 Total Cases: <b>{tot}</b></p>
+                        <p style="margin: 2px 0; color: #2ecc71; font-size: 12px;">🎯 Disposed: <b>{disp}</b></p>
+                        <p style="margin: 2px 0; color: #3498db; font-size: 12px;">✅ Replied: <b>{rep}</b></p>
+                        <p style="margin: 2px 0; color: #e74c3c; font-size: 12px;">✉️ Not Replied: <b>{not_rep}</b></p>
+                        <p style="margin: 2px 0; color: {'#ff4b4b' if oot > 0 else '#2ecc71'}; font-size: 12px;">🚨 TL Over: <b>{oot}</b></p>
                     </div>
                     """,
               unsafe_allow_html=True,
           )
 
-    # --- DRILL-DOWN GRID DISPLAY ---
-    st.markdown("---")
-    if selected_office != "-- Select Office --":
-      st.subheader(
-          f"🔍 Drill-down Details for: `{selected_office}` [{selected_category}]"
-      )
-      # संबंधित ऑफिस का डेटा फिल्टर करें
-      drill_df = filtered_df[filtered_df[office_col] == selected_office]
+          # --- DIRECT ACTION BUTTONS FOR EACH TILE ---
+          b_col1, b_col2, b_col3 = st.columns(3)
+          if b_col1.button("📋 All", key=f"tot_{off_name}"):
+            st.session_state.active_drill_office = off_name
+            st.session_state.active_drill_cat = "All Cases"
+          if b_col2.button(f"✉️ Not Rep ({not_rep})", key=f"nr_{off_name}"):
+            st.session_state.active_drill_office = off_name
+            st.session_state.active_drill_cat = "Not Replied"
+          if b_col3.button(f"🚨 TL Over ({oot})", key=f"tlo_{off_name}"):
+            st.session_state.active_drill_office = off_name
+            st.session_state.active_drill_cat = "TL Over"
+          st.markdown("<br>", unsafe_allow_html=True)
 
-      if selected_category == "Disposed":
+    # --- DRILL-DOWN GRID DISPLAY BASED ON BUTTON CLICK ---
+    st.markdown("---")
+    if st.session_state.active_drill_office:
+      sel_off = st.session_state.active_drill_office
+      sel_cat = st.session_state.active_drill_cat
+
+      col_h1, col_h2 = st.columns([4, 1])
+      with col_h1:
+        st.subheader(f"🔍 Drill-down Details: `{sel_off}` [{sel_cat}]")
+      with col_h2:
+        if st.button("❌ Close Grid"):
+          st.session_state.active_drill_office = None
+          st.rerun()
+
+      drill_df = filtered_df[filtered_df[office_col] == sel_off]
+      if sel_cat == "Disposed":
         drill_df = drill_df[drill_df["Is_Disposed"] == True]
-      elif selected_category == "Replied":
+      elif sel_cat == "Replied":
         drill_df = drill_df[drill_df["Is_Replied"] == True]
-      elif selected_category == "Not Replied":
+      elif sel_cat == "Not Replied":
         drill_df = drill_df[drill_df["Is_Not_Replied"] == True]
-      elif selected_category == "Time Limit Over (TL Over)":
+      elif sel_cat == "TL Over":
         drill_df = drill_df[drill_df["Is_TL_Over"] == True]
 
       if not drill_df.empty:
-        st.success(f"Found `{len(drill_df)}` cases matching the selection.")
+        st.success(f"Showing `{len(drill_df)}` records for {sel_off}.")
         st.dataframe(drill_df, use_container_width=True)
       else:
-        st.warning("No cases found for this specific category in the selected office.")
+        st.warning(f"No records found under '{sel_cat}' for {sel_off}.")
     else:
       st.info(
-          "💡 Tip: Select a department and category from the dropdown above to"
-          " view specific case details in a grid."
+          "💡 **Tip:** Click on any office's action buttons (e.g. `Not Replied`"
+          " or `TL Over`) above to instantly view their detailed case grid."
       )
   else:
     st.warning("⚠️ Office column not detected for generating analytical tiles.")
