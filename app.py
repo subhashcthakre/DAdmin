@@ -318,36 +318,31 @@ if module == "📊 Time Limit (TL) Letters & Office Tiles":
       f" Filtered Records: `{len(filtered_df)}`"
   )
 
-  # --- PERFECT LIFE-CYCLE PARSING LOGIC ---
+  # --- STRICT STATUS PARSING LOGIC ---
   if office_col:
-    # Status column analysis
     status_series = (
-        filtered_df["Status"].astype(str)
+        filtered_df["Status"].astype(str).str.strip()
         if "Status" in filtered_df.columns
         else pd.Series([""] * len(filtered_df))
     )
 
-    # 1. Disposed: जब कलेक्टर द्वारा डिस्पोज किया गया हो
+    # 1. Disposed: केवल तभी जब स्टेटस में स्पष्ट रूप से Disposed/Closed/Resolved हो
     filtered_df["Is_Disposed"] = status_series.str.contains(
-        "Disposed|Closed|Resolved", case=False, na=False
+        r"\b(Disposed|Closed|Resolved)\b", case=False, na=False, regex=True
     )
 
-    # 2. Replied: जब स्टेटस की शुरुआत Replied से हो (या रिप्लाई आ चुका हो)
+    # 2. Replied: जब स्टेटस की शुरुआत 'Replied' से होती है (यानी जवाब दिया जा चुका है)
     filtered_df["Is_Replied"] = status_series.str.startswith(
         "Replied", na=False
-    ) | status_series.str.contains("Replied", case=False, na=False)
-
-    # 3. Not Replied: जब स्पष्ट रूप से Not Replied हो
-    filtered_df["Is_Not_Replied"] = status_series.str.contains(
-        "Not Replied", case=False, na=False
-    ) | (~filtered_df["Is_Replied"] & ~filtered_df["Is_Disposed"])
-
-    # 4. Pending to Dispose: जब रिप्लाई आ गया है लेकिन अभी तक कलेक्टर द्वारा डिस्पोज नहीं हुआ है
-    filtered_df["Is_Pending_To_Dispose"] = (
-        filtered_df["Is_Replied"] & ~filtered_df["Is_Disposed"]
     )
 
-    # 5. Time Limit Over: यदि TL Date निकल चुकी है और केस अभी तक Not Replied है (Disposed नहीं हुआ)
+    # 3. Not Replied: जब स्टेटस 'Not Replied' है (और Disposed नहीं है)
+    filtered_df["Is_Not_Replied"] = (
+        status_series.str.contains("Not Replied", case=False, na=False)
+        | (status_series == "")
+    ) & ~filtered_df["Is_Disposed"]
+
+    # 4. Time Limit Over: यदि TL Date आज से पहले की है और केस अभी तक 'Not Replied' है
     today_date = datetime.date.today()
     if "TL Date" in filtered_df.columns:
       filtered_df["Parsed_TL_Date"] = pd.to_datetime(
@@ -355,7 +350,7 @@ if module == "📊 Time Limit (TL) Letters & Office Tiles":
       ).dt.date
       filtered_df["Is_TL_Over"] = (
           filtered_df["Parsed_TL_Date"] < today_date
-      ) & ~filtered_df["Is_Disposed"] & filtered_df["Is_Not_Replied"]
+      ) & filtered_df["Is_Not_Replied"]
     else:
       filtered_df["Is_TL_Over"] = False
 
@@ -365,7 +360,6 @@ if module == "📊 Time Limit (TL) Letters & Office Tiles":
         .agg(
             Total_Cases=(office_col, "count"),
             Disposed_Cases=("Is_Disposed", "sum"),
-            Pending_To_Dispose=("Is_Pending_To_Dispose", "sum"),
             Replied_Cases=("Is_Replied", "sum"),
             Not_Replied_Cases=("Is_Not_Replied", "sum"),
             TL_Over=("Is_TL_Over", "sum"),
@@ -375,7 +369,7 @@ if module == "📊 Time Limit (TL) Letters & Office Tiles":
   else:
     office_summary = pd.DataFrame()
 
-  # --- AGGREGATE TOP METRICS FOR GIST ---
+  # --- AGGREGATE TOP METRICS FOR GIST (Pending to Dispose को पूरी तरह से हटा दिया गया है) ---
   total_cases_sum = (
       office_summary["Total_Cases"].sum()
       if not office_summary.empty
@@ -383,11 +377,6 @@ if module == "📊 Time Limit (TL) Letters & Office Tiles":
   )
   total_disposed_sum = (
       office_summary["Disposed_Cases"].sum() if not office_summary.empty else 0
-  )
-  total_pending_sum = (
-      office_summary["Pending_To_Dispose"].sum()
-      if not office_summary.empty
-      else 0
   )
   total_replied_sum = (
       office_summary["Replied_Cases"].sum() if not office_summary.empty else 0
@@ -401,14 +390,13 @@ if module == "📊 Time Limit (TL) Letters & Office Tiles":
       office_summary["TL_Over"].sum() if not office_summary.empty else 0
   )
 
-  # Top Gist Metrics Cards
-  m1, m2, m3, m4, m5, m6 = st.columns(6)
+  # Top Gist Metrics Cards (अब 5 मुख्य कॉलम बिना Pending के)
+  m1, m2, m3, m4, m5 = st.columns(5)
   m1.metric("📦 Total", int(total_cases_sum))
   m2.metric("🎯 Disposed", int(total_disposed_sum))
-  m3.metric("⏳ Pending to Dispose", int(total_pending_sum))
-  m4.metric("✅ Replied", int(total_replied_sum))
-  m5.metric("✉️ Not Replied", int(total_not_replied_sum))
-  m6.metric(
+  m3.metric("✅ Replied", int(total_replied_sum))
+  m4.metric("✉️ Not Replied", int(total_not_replied_sum))
+  m5.metric(
       "🚨 TL Over",
       int(total_oot_sum),
       delta="Critical",
@@ -433,7 +421,6 @@ if module == "📊 Time Limit (TL) Letters & Office Tiles":
         off_name = row[office_col]
         tot = row["Total_Cases"]
         disp = row["Disposed_Cases"]
-        pend_disp = row["Pending_To_Dispose"]
         rep = row["Replied_Cases"]
         not_rep = row["Not_Replied_Cases"]
         oot = row["TL_Over"]
@@ -447,7 +434,6 @@ if module == "📊 Time Limit (TL) Letters & Office Tiles":
                         <hr style="margin: 5px 0 8px 0; border-color: #444;">
                         <p style="margin: 2px 0; color: #cfcfcf; font-size: 13px;">📦 Total Cases: <b>{tot}</b></p>
                         <p style="margin: 2px 0; color: #2ecc71; font-size: 13px;">🎯 Disposed: <b>{disp}</b></p>
-                        <p style="margin: 2px 0; color: #ffa500; font-size: 13px;">⏳ Pending to Dispose: <b>{pend_disp}</b></p>
                         <p style="margin: 2px 0; color: #3498db; font-size: 13px;">✅ Replied: <b>{rep}</b></p>
                         <p style="margin: 2px 0; color: #e74c3c; font-size: 13px;">✉️ Not Replied: <b>{not_rep}</b></p>
                         <p style="margin: 2px 0; color: {'#ff4b4b' if oot > 0 else '#2ecc71'}; font-size: 13px;">🚨 TL Over: <b>{oot}</b></p>
