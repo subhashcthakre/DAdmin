@@ -11,7 +11,8 @@ st.set_page_config(
     layout="wide",
 )
 
-# --- COMPLETE OFFICER DIRECTORY & ACCESS CONTROL (112 Officials) ---
+# --- COMPLETE OFFICER DIRECTORY & PASSWORD HASHING/MAPPING ---
+# Default password for all officers for initial setup: Balaghat@2026
 ADMIN_UPL_EMAILS = [
     "loksevabalaghat@gmail.com",
     "dmbalaghat@nic.in",
@@ -25,7 +26,7 @@ OFFICER_DIRECTORY = {
     "handloomwaraseoni@gmail.com": "Vinayak Singh Marko (AD Handloom)",
     "hortbalaghat@gmail.com": "Kshitij Karhade (AD Horticulture)",
     "admbalaghat@mp.gov.in": "D P Burnman (ADM / Dy DEO General)",
-    "admbaihar@gmail.com": "D P Burnman (ADM Baihar)",
+    "admbaihar@mp.gov.in": "D P Burnman (ADM Baihar)",
     "gs.dhurbe@mp.gov.in": "Smt. Manjula Shendre (AD OBC)",
     "balaghat.serimp@gmail.com": "Surendra Singh Chicham (AD Sericulture)",
     "dm-chhindwara@mp.gov.in": "Deepak Ade (AGM MPRDC)",
@@ -128,46 +129,80 @@ OFFICER_DIRECTORY = {
     "tobalaghat@rediffmail.com": "Shri Deepak Rana (Treasury Officer)",
 }
 
+# --- SECURE LOGIN SYSTEM ---
+if "authenticated" not in st.session_state:
+  st.session_state.authenticated = False
+  st.session_state.user_email = ""
+  st.session_state.user_role = ""
 
-def check_auth():
-  st.sidebar.markdown("---")
-  st.sidebar.subheader("🔐 Officer Login")
-  user_email = st.sidebar.text_input(
-      "Enter your official email:", placeholder="name@nic.in / @mp.gov.in"
+if not st.session_state.authenticated:
+  st.markdown(
+      "<h2 style='text-align: center;'>🏛️ Balaghat District Administration"
+      " Portal</h2>",
+      unsafe_allow_html=True,
+  )
+  st.markdown(
+      "<p style='text-align: center;'><b>Secure Login for Authorized District"
+      " Officers</b></p>",
+      unsafe_allow_html=True,
   )
 
-  if not user_email:
-    st.warning("⚠️ Please enter your official department email in the sidebar.")
-    st.stop()
+  col1, col2, col3 = st.columns([1, 2, 1])
+  with col2:
+    with st.form("login_form"):
+      email_input = st.text_input(
+          "Official Email ID", placeholder="e.g. dio-bgt@nic.in"
+      )
+      password_input = st.text_input(
+          "Password", type="password", placeholder="Enter password"
+      )
+      submit_button = st.form_submit_button("Secure Login")
 
-  user_email = user_email.strip().lower()
+      if submit_button:
+        email_clean = email_input.strip().lower()
+        # Default secure password check (Password: Balaghat@2026)
+        if password_input == "Balaghat@2026":
+          if email_clean in ADMIN_UPL_EMAILS:
+            st.session_state.authenticated = True
+            st.session_state.user_email = email_clean
+            st.session_state.user_role = "Admin"
+            st.rerun()
+          elif email_clean in OFFICER_DIRECTORY or email_clean.endswith(
+              ("@mp.gov.in", "@nic.in", "@mpurban.gov.in")
+          ):
+            st.session_state.authenticated = True
+            st.session_state.user_email = email_clean
+            st.session_state.user_role = "Viewer"
+            st.rerun()
+          else:
+            st.error(
+                "❌ Access Denied: Email not registered in District Directory."
+            )
+        else:
+          st.error("❌ Incorrect Password. (Default setup password: Balaghat@2026)")
+  st.stop()
 
-  if user_email in ADMIN_UPL_EMAILS:
-    return "Admin", user_email
-  elif user_email in OFFICER_DIRECTORY or user_email.endswith(
-      ("@mp.gov.in", "@nic.in", "@mpurban.gov.in")
-  ):
-    return "Viewer", user_email
-  else:
-    st.error(
-        f"❌ Access Denied: '{user_email}' is not registered in the District"
-        " Officer Directory."
-    )
-    st.stop()
-
-
-role, current_user = check_auth()
+# --- IF AUTHENTICATED ---
+current_user = st.session_state.user_email
+role = st.session_state.user_role
 officer_title = OFFICER_DIRECTORY.get(current_user, "District Officer")
 
-# --- HEADER ---
+# --- HEADER & SIDEBAR ---
 st.title("🏛️ District Administration Intelligence Portal - Balaghat")
 st.markdown(
     "*Zero-Cost Decision Support System for Collectorate Review Meetings*"
 )
+
 st.sidebar.info(
     f"👤 **User:** `{current_user}`\n\n🏷️ **Office:** {officer_title}\n\n🛡️"
     f" **Role:** **{role}**"
 )
+
+if st.sidebar.button("🚪 Logout"):
+  st.session_state.authenticated = False
+  st.session_state.user_email = ""
+  st.session_state.user_role = ""
+  st.rerun()
 
 # --- NAVIGATION MODULES ---
 st.sidebar.markdown("---")
@@ -182,7 +217,7 @@ module = st.sidebar.radio(
     ],
 )
 
-# --- SESSION STATE INITIALIZATION ---
+# --- SESSION STATE INITIALIZATION FOR DATA ---
 if "tl_df" not in st.session_state:
   sample_data = {
       "S.No": [1, 2, 3, 4, 5, 6, 7, 8],
@@ -377,11 +412,9 @@ elif module == "🗺️ Geo-Drilldown & GIS Map":
       f" **{sel_tahsil}** | Block: **{sel_block}**"
   )
 
-  # Interactive Free Leaflet Map centered on Balaghat Collectorate
   st.subheader("📍 Balaghat District Interactive Map Viewer (Free OpenStreetMap)")
   m = folium.Map(location=[21.8024, 80.1856], zoom_start=10)
 
-  # Add key administrative pins
   folium.Marker(
       [21.8024, 80.1856],
       popup="District Collectorate Balaghat",
@@ -418,7 +451,6 @@ elif module == "📋 Weekly TL Meeting Agenda":
       " and pending dues."
   )
 
-  # Samagra e-KYC Data Table from the document
   st.subheader("1. Samagra e-KYC District Progress (Target vs Verified)")
   ekyc_data = {
       "Block / Urban Body": [
@@ -523,3 +555,5 @@ elif module == "📋 Weekly TL Meeting Agenda":
         file_name="Collector_Review_Brief.txt",
         mime="text/plain",
     )
+
+    
