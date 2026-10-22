@@ -237,24 +237,24 @@ if "tl_df" not in st.session_state:
             "DDA Agriculture",
         ],
         "Marked Date": [
-            "2026-01-10",
-            "2026-02-15",
-            "2026-03-01",
-            "2026-01-20",
-            "2026-02-10",
-            "2026-03-05",
-            "2026-01-15",
-            "2026-02-01",
+            "10/01/2026",
+            "15/02/2026",
+            "01/03/2026",
+            "20/01/2026",
+            "10/02/2026",
+            "05/03/2026",
+            "15/01/2026",
+            "01/02/2026",
         ],
         "TL Date": [
-            "2026-01-25",
-            "2026-02-28",
-            "2026-03-15",
-            "2026-02-05",
-            "2026-02-25",
-            "2026-03-20",
-            "2026-02-01",
-            "2026-02-15",
+            "25/01/2026",
+            "28/02/2026",
+            "15/03/2026",
+            "05/02/2026",
+            "25/02/2026",
+            "20/03/2026",
+            "01/02/2026",
+            "15/02/2026",
         ],
         "Total Cases": [120, 95, 150, 60, 45, 80, 110, 70],
         "Replied Cases": [100, 80, 140, 45, 35, 75, 90, 60],
@@ -316,16 +316,16 @@ if module == "📊 Time Limit (TL) Letters & Office Tiles":
         format="YYYY-MM-DD",
     )
 
-  # Apply Date Filtering if 'Marked Date' exists
   office_col = None
   for col_cand in ["Present Office", "Name of Office", "Office", "Department"]:
     if col_cand in df.columns:
       office_col = col_cand
       break
 
+  # dayfirst=True का उपयोग ताकि DD/MM/YYYY सही से पार्स हो सके
   if "Marked Date" in df.columns and office_col:
     df["Parsed_Date"] = pd.to_datetime(
-        df["Marked Date"], errors="coerce"
+        df["Marked Date"], errors="coerce", dayfirst=True
     ).dt.date
     filtered_df = df[
         (df["Parsed_Date"] >= from_date) & (df["Parsed_Date"] <= to_date)
@@ -371,16 +371,12 @@ if module == "📊 Time Limit (TL) Letters & Office Tiles":
   )
 
   if office_col:
-    # Group by Office to generate summary values if raw rows are present
     if "Total Cases" not in filtered_df.columns:
-      # If raw transactional rows are uploaded, aggregate them
       office_summary = (
           filtered_df.groupby(office_col)
           .agg(
               Total_Cases=(office_col, "count"),
-              Pending_Cases=("Pending Days", lambda x: (x > 0).sum())
-              if "Pending Days" in filtered_df.columns
-              else (office_col, "count"),
+              Pending_Cases=(office_col, "count"),
               Disposed_Cases=(office_col, "count"),
               Replied_Cases=(office_col, "count"),
               TL_Over=(office_col, "count"),
@@ -388,7 +384,6 @@ if module == "📊 Time Limit (TL) Letters & Office Tiles":
           .reset_index()
       )
     else:
-      # If summary columns already exist
       office_summary = (
           filtered_df.groupby(office_col)
           .agg(
@@ -551,7 +546,12 @@ elif module == "📋 Weekly TL Meeting Agenda":
           "Janpad Panchayat, BALAGHAT",
           "Nagar Palika, WARA SEONI",
           "Janpad Panchayat, LAL BURRA",
-          * ["Janpad Panchayat, KIRNAPUR", "Janpad Panchayat, BAIHAR", "Janpad Panchayat, LANJI", "Janpad Panchayat, PARASWADA", "Janpad Panchayat, KATANGI", "Nagar Palika, Balaghat (⚠️ RED ALERT)"],
+          "Janpad Panchayat, KIRNAPUR",
+          "Janpad Panchayat, BAIHAR",
+          "Janpad Panchayat, LANJI",
+          "Janpad Panchayat, PARASWADA",
+          "Janpad Panchayat, KATANGI",
+          "Nagar Palika, Balaghat (⚠️ RED ALERT)",
       ],
       "Verified %": [
           98.23,
