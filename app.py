@@ -4,6 +4,7 @@ import pandas as pd
 import streamlit as st
 import folium
 from streamlit_folium import st_folium
+import datetime
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(
@@ -63,7 +64,7 @@ OFFICER_DIRECTORY = {
     "fotsbghat@mp.gov.in": "Mr. Nithiyanantham L. (DFO South)",
     "dio-bgt@nic.in": "Subhash Chandra Thakre (DIO NIC)",
     "drbalaghat@gmail.com": "Mrs. Keerti Asati (District Registrar)",
-    "dmobalaghat.mp.gov.in": "Vivek Tiwari (DMO Markfed)",
+    "dmobalaghat.mp.gmail.com": "Vivek Tiwari (DMO Markfed)",
     "zskbalaghat2@gmail.com": "Shri G-S Barman (DPC ZSK)",
     "srlm-balaghat@mp.gov.in": "Shweta Mehto (DPM NRLM)",
     "dpobalaghat@rediffmail.com": "Shri Deepak Rana (DPO Pension & Treasury)",
@@ -225,7 +226,7 @@ if "tl_df" not in st.session_state:
   else:
     sample_data = {
         "S.No": [1, 2, 3, 4, 5, 6, 7, 8],
-        "Name of Office": [
+        "Present Office": [
             "CMHO (Health)",
             "DEO (Education)",
             "CEO ZP Balaghat",
@@ -235,9 +236,31 @@ if "tl_df" not in st.session_state:
             "DPO WCD",
             "DDA Agriculture",
         ],
-        "Received Letters": [120, 95, 150, 60, 45, 80, 110, 70],
-        "Pending Letters": [5, 12, 3, 10, 8, 2, 15, 6],
-        "Out of Time Limit": [1, 3, 0, 4, 2, 0, 5, 1],
+        "Marked Date": [
+            "2026-01-10",
+            "2026-02-15",
+            "2026-03-01",
+            "2026-01-20",
+            "2026-02-10",
+            "2026-03-05",
+            "2026-01-15",
+            "2026-02-01",
+        ],
+        "TL Date": [
+            "2026-01-25",
+            "2026-02-28",
+            "2026-03-15",
+            "2026-02-05",
+            "2026-02-25",
+            "2026-03-20",
+            "2026-02-01",
+            "2026-02-15",
+        ],
+        "Total Cases": [120, 95, 150, 60, 45, 80, 110, 70],
+        "Replied Cases": [100, 80, 140, 45, 35, 75, 90, 60],
+        "Pending Cases": [20, 15, 10, 15, 10, 5, 20, 10],
+        "Disposed Cases": [100, 80, 140, 45, 35, 75, 90, 60],
+        "Time Limit Over Cases": [3, 5, 1, 6, 2, 0, 4, 2],
     }
     st.session_state.tl_df = pd.DataFrame(sample_data)
 
@@ -253,12 +276,12 @@ if "jansunwai_df" not in st.session_state:
   }
   st.session_state.jansunwai_df = pd.DataFrame(js_data)
 
-# --- MODULE 1: TIME LIMIT LETTERS & OFFICE-WISE TILES ---
+# --- MODULE 1: TIME LIMIT LETTERS & OFFICE-WISE ANALYTICS TILES ---
 if module == "📊 Time Limit (TL) Letters & Office Tiles":
-  st.header("📊 Department & Office-wise TL Performance Tiles")
+  st.header("📊 Department & Office-wise TL Performance Analytics")
   st.markdown(
-      "Quick executive summary cards (Tiles) for each district office to"
-      " monitor pending letters and Red Alerts."
+      "Filter cases by date and view comprehensive office-wise analytical"
+      " tiles."
   )
 
   if role == "Admin":
@@ -277,50 +300,114 @@ if module == "📊 Time Limit (TL) Letters & Office Tiles":
 
   df = st.session_state.tl_df.copy()
 
-  # --- AUTOMATIC COLUMN MAPPING (नया स्मार्ट लॉजिक) ---
-  # यदि एक्सेल में 'Name of Office' नहीं है, तो 'Present Office' को ऑफिस मान लें
+  # --- DATE PICKER FILTER (कब से देखना है) ---
+  st.markdown("---")
+  col_d1, col_d2 = st.columns(2)
+  with col_d1:
+    from_date = st.date_input(
+        "📅 From Date (कब से देखना है):",
+        value=datetime.date(2026, 1, 1),
+        format="YYYY-MM-DD",
+    )
+  with col_d2:
+    to_date = st.date_input(
+        "📅 To Date (कब तक):",
+        value=datetime.date.today(),
+        format="YYYY-MM-DD",
+    )
+
+  # Apply Date Filtering if 'Marked Date' exists
   office_col = None
-  for col_candidate in [
-      "Name of Office",
-      "Present Office",
-      "Office",
-      "Department",
-  ]:
-    if col_candidate in df.columns:
-      office_col = col_candidate
+  for col_cand in ["Present Office", "Name of Office", "Office", "Department"]:
+    if col_cand in df.columns:
+      office_col = col_cand
       break
 
-  # Top Gist Metrics (यदि कॉलम न मिले तो सुरक्षित काउंट लें)
-  tot_rec = len(df)
-  tot_pend = (
-      df["Pending Days"].sum()
-      if "Pending Days" in df.columns
-      else (len(df) * 5)
+  if "Marked Date" in df.columns and office_col:
+    df["Parsed_Date"] = pd.to_datetime(
+        df["Marked Date"], errors="coerce"
+    ).dt.date
+    filtered_df = df[
+        (df["Parsed_Date"] >= from_date) & (df["Parsed_Date"] <= to_date)
+    ]
+  else:
+    filtered_df = df
+
+  st.info(
+      f"🔍 Showing analytics from **{from_date}** to **{to_date}** | Total"
+      f" Filtered Records: `{len(filtered_df)}`"
+  )
+
+  # --- AGGREGATE METRICS FOR GIST ---
+  total_cases_sum = (
+      filtered_df["Total Cases"].sum()
+      if "Total Cases" in filtered_df.columns
+      else len(filtered_df)
+  )
+  total_pending_sum = (
+      filtered_df["Pending Cases"].sum()
+      if "Pending Cases" in filtered_df.columns
+      else 0
+  )
+  total_oot_sum = (
+      filtered_df["Time Limit Over Cases"].sum()
+      if "Time Limit Over Cases" in filtered_df.columns
+      else 0
   )
 
   c1, c2, c3 = st.columns(3)
-  c1.metric("📦 Total Records / Letters", int(tot_rec))
-  c2.metric("⏳ Total Rows / Active", int(len(df)))
+  c1.metric("📦 Filtered Total Cases", int(total_cases_sum))
+  c2.metric("⏳ Total Pending Cases", int(total_pending_sum))
   c3.metric(
-      "🚨 Discrepancy / Alert Rows",
-      int(df.shape[0] if "df" in locals() else 0),
-      delta="Live Monitor",
+      "🚨 Time Limit Over (Red Alert)",
+      int(total_oot_sum),
+      delta="Critical",
       delta_color="inverse",
   )
 
   st.markdown("---")
+  st.subheader(
+      "🏢 Office-wise Analytics Tiles (कार्यालय-वार विश्लेषणात्मक टाइल्स)"
+  )
 
   if office_col:
-    st.subheader(
-        f"🏢 Office-wise Performance Tiles ( आधारित कॉलम: `{office_col}` )"
-    )
-
-    # ग्रुप करके प्रत्येक ऑफिस के आंकड़े निकालें
-    office_summary = (
-        df.groupby(office_col)
-        .size()
-        .reset_index(name="Total Letters / Cases")
-    )
+    # Group by Office to generate summary values if raw rows are present
+    if "Total Cases" not in filtered_df.columns:
+      # If raw transactional rows are uploaded, aggregate them
+      office_summary = (
+          filtered_df.groupby(office_col)
+          .agg(
+              Total_Cases=(office_col, "count"),
+              Pending_Cases=("Pending Days", lambda x: (x > 0).sum())
+              if "Pending Days" in filtered_df.columns
+              else (office_col, "count"),
+              Disposed_Cases=(office_col, "count"),
+              Replied_Cases=(office_col, "count"),
+              TL_Over=(office_col, "count"),
+          )
+          .reset_index()
+      )
+    else:
+      # If summary columns already exist
+      office_summary = (
+          filtered_df.groupby(office_col)
+          .agg(
+              Total_Cases=("Total Cases", "sum"),
+              Replied_Cases=("Replied Cases", "sum")
+              if "Replied Cases" in filtered_df.columns
+              else (office_col, "count"),
+              Pending_Cases=("Pending Cases", "sum")
+              if "Pending Cases" in filtered_df.columns
+              else (office_col, "count"),
+              Disposed_Cases=("Disposed Cases", "sum")
+              if "Disposed Cases" in filtered_df.columns
+              else (office_col, "count"),
+              TL_Over=("Time Limit Over Cases", "sum")
+              if "Time Limit Over Cases" in filtered_df.columns
+              else (office_col, "count"),
+          )
+          .reset_index()
+      )
 
     num_cols = 3
     rows = [
@@ -332,29 +419,34 @@ if module == "📊 Time Limit (TL) Letters & Office Tiles":
       cols = st.columns(num_cols)
       for idx, (_, row) in enumerate(row_chunk.iterrows()):
         off_name = row[office_col]
-        total_cases = row["Total Letters / Cases"]
+        tot = row["Total_Cases"]
+        rep = row["Replied_Cases"]
+        pend = row["Pending_Cases"]
+        disp = row["Disposed_Cases"]
+        oot = row["TL_Over"]
 
         with cols[idx]:
+          border_color = "red" if oot > 0 else "#2ecc71"
           st.markdown(
               f"""
-                    <div style="padding: 15px; border-radius: 8px; border: 2px solid #2ecc71; background-color: #1e1e1e; margin-bottom: 15px;">
-                        <h4 style="margin: 0; color: #ffffff;">{off_name}</h4>
-                        <hr style="margin: 5px 0 10px 0; border-color: #444;">
-                        <p style="margin: 3px 0; color: #cfcfcf;">📂 Total Cases: <b>{total_cases}</b></p>
-                        <p style="margin: 3px 0; color: #ffa500;">📊 Status: <b>Active Review</b></p>
+                    <div style="padding: 15px; border-radius: 8px; border: 2px solid {border_color}; background-color: #1e1e1e; margin-bottom: 15px;">
+                        <h4 style="margin: 0; color: #ffffff; font-size: 16px;">{off_name}</h4>
+                        <hr style="margin: 5px 0 8px 0; border-color: #444;">
+                        <p style="margin: 2px 0; color: #cfcfcf; font-size: 13px;">📦 Total Cases: <b>{tot}</b></p>
+                        <p style="margin: 2px 0; color: #3498db; font-size: 13px;">✅ Replied: <b>{rep}</b></p>
+                        <p style="margin: 2px 0; color: #2ecc71; font-size: 13px;">🎯 Disposed: <b>{disp}</b></p>
+                        <p style="margin: 2px 0; color: #ffa500; font-size: 13px;">⏳ Pending: <b>{pend}</b></p>
+                        <p style="margin: 2px 0; color: {'#ff4b4b' if oot > 0 else '#2ecc71'}; font-size: 13px;">🚨 TL Over: <b>{oot}</b></p>
                     </div>
                     """,
               unsafe_allow_html=True,
           )
   else:
-    st.warning(
-        "⚠️ Office column not automatically detected. Displaying full dataset"
-        " table below:"
-    )
+    st.warning("⚠️ Office column not detected for generating analytical tiles.")
 
   st.markdown("---")
-  st.subheader("📋 Complete Department Data Table")
-  st.dataframe(df, use_container_width=True)
+  st.subheader("📋 Filtered Detailed Data Table")
+  st.dataframe(filtered_df, use_container_width=True)
 
 # --- MODULE 2: JANSUNWAI TRACKER ---
 elif module == "📞 Jansunwai Tracker":
@@ -459,12 +551,7 @@ elif module == "📋 Weekly TL Meeting Agenda":
           "Janpad Panchayat, BALAGHAT",
           "Nagar Palika, WARA SEONI",
           "Janpad Panchayat, LAL BURRA",
-          "Janpad Panchayat, KIRNAPUR",
-          "Janpad Panchayat, BAIHAR",
-          "Janpad Panchayat, LANJI",
-          "Janpad Panchayat, PARASWADA",
-          "Janpad Panchayat, KATANGI",
-          "Nagar Palika, Balaghat (⚠️ RED ALERT)",
+          * ["Janpad Panchayat, KIRNAPUR", "Janpad Panchayat, BAIHAR", "Janpad Panchayat, LANJI", "Janpad Panchayat, PARASWADA", "Janpad Panchayat, KATANGI", "Nagar Palika, Balaghat (⚠️ RED ALERT)"],
       ],
       "Verified %": [
           98.23,
