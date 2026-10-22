@@ -256,11 +256,17 @@ if "tl_df" not in st.session_state:
             "01/02/2026",
             "15/02/2026",
         ],
-        "Total Cases": [120, 95, 150, 60, 45, 80, 110, 70],
-        "Disposed Cases": [100, 80, 140, 45, 35, 75, 90, 60],
-        "Replied Cases": [90, 75, 130, 40, 30, 70, 85, 55],
-        "Not Replied Cases": [10, 5, 10, 5, 5, 5, 5, 5],
-        "Time Limit Over Cases": [3, 5, 1, 6, 2, 0, 4, 2],
+        "Status": [
+            "Repliedok",
+            "Not Replied",
+            "Replieddone",
+            "Not Replied",
+            "Repliedok",
+            "Not Replied",
+            "Repliedok",
+            "Not Replied",
+        ],
+        "Time Limit Over Cases": [0, 1, 0, 1, 0, 0, 1, 0],
     }
     st.session_state.tl_df = pd.DataFrame(sample_data)
 
@@ -338,71 +344,41 @@ if module == "📊 Time Limit (TL) Letters & Office Tiles":
       f" Filtered Records: `{len(filtered_df)}`"
   )
 
-  # --- AUTOMATIC CALCULATION OF METRICS IF COLUMNS ARE RAW ROWS ---
-  # यदि एक्सेल में व्यक्तिगत रो (Rows) हैं, तो उन्हें समरी में बदलें
+  # --- STATUS COLUMN PARSING & CALCULATIONS ---
   if office_col:
-    # Check if summary columns exist, else calculate dynamically
-    if "Total Cases" not in filtered_df.columns:
-      # Each row is a single case/letter
-      filtered_df["Total_Cases_Val"] = 1
-      # Check if disposed/replied columns exist
-      disp_col_match = next(
-          (
-              c
-              for c in filtered_df.columns
-              if "dispose" in c.lower() or "status" in c.lower()
-          ),
-          None,
+    if "Status" in filtered_df.columns:
+      filtered_df["Is_Replied"] = (
+          filtered_df["Status"].astype(str).str.startswith("Replied", na=False)
       )
-      filtered_df["Disposed_Val"] = (
-          1
-          if disp_col_match
-          and filtered_df[disp_col_match]
+      filtered_df["Is_Not_Replied"] = (
+          filtered_df["Status"]
           .astype(str)
-          .str.contains("dispose|yes|resolved", case=False, na=False)
-          .any()
-          else 0
-      )
-      filtered_df["Pending_Val"] = filtered_df["Total_Cases_Val"] - 1  # Dummy
-
-      office_summary = (
-          filtered_df.groupby(office_col)
-          .agg(
-              Total_Cases=(office_col, "count"),
-              Disposed_Cases=(office_col, "count"),
-              Replied_Cases=(office_col, "count"),
-              Not_Replied_Cases=(office_col, lambda x: 0),
-              Pending_Cases=(office_col, lambda x: 0),  # Not Disposed
-              TL_Over=(office_col, lambda x: 0),
-          )
-          .reset_index()
+          .str.contains("Not Replied", case=False, na=False)
       )
     else:
-      # If columns like Total Cases, Disposed Cases already exist in uploaded excel
-      office_summary = (
-          filtered_df.groupby(office_col)
-          .agg(
-              Total_Cases=("Total Cases", "sum"),
-              Disposed_Cases=("Disposed Cases", "sum")
-              if "Disposed Cases" in filtered_df.columns
-              else (office_col, "count"),
-              Replied_Cases=("Replied Cases", "sum")
-              if "Replied Cases" in filtered_df.columns
-              else (office_col, "count"),
-              Not_Replied_Cases=("Not Replied Cases", "sum")
-              if "Not Replied Cases" in filtered_df.columns
-              else (office_col, lambda x: 0),
-              TL_Over=("Time Limit Over Cases", "sum")
-              if "Time Limit Over Cases" in filtered_df.columns
-              else (office_col, lambda x: 0),
-          )
-          .reset_index()
-      )
+      filtered_df["Is_Replied"] = False
+      filtered_df["Is_Not_Replied"] = True
 
-    # Pending Cases = Total Cases - Disposed Cases (अति आवश्यक नियम)
-    office_summary["Pending_Cases"] = (
-        office_summary["Total_Cases"] - office_summary["Disposed_Cases"]
+    # समरी तैयार करें
+    office_summary = (
+        filtered_df.groupby(office_col)
+        .agg(
+            Total_Cases=(office_col, "count"),
+            Replied_Cases=("Is_Replied", "sum"),
+            Not_Replied_Cases=("Is_Not_Replied", "sum"),
+            TL_Over=(
+                "Time Limit Over Cases",
+                "sum",
+            )
+            if "Time Limit Over Cases" in filtered_df.columns
+            else (office_col, lambda x: 0),
+        )
+        .reset_index()
     )
+
+    # नियम: Pending = Total - Replied (या Not Replied)
+    office_summary["Pending_Cases"] = office_summary["Not_Replied_Cases"]
+    office_summary["Disposed_Cases"] = office_summary["Replied_Cases"]
   else:
     office_summary = pd.DataFrame()
 
@@ -467,7 +443,7 @@ if module == "📊 Time Limit (TL) Letters & Office Tiles":
         oot = row["TL_Over"]
 
         with cols[idx]:
-          border_color = "red" if oot > 0 or pend > 5 else "#2ecc71"
+          border_color = "red" if oot > 0 or not_rep > 0 else "#2ecc71"
           st.markdown(
               f"""
                     <div style="padding: 15px; border-radius: 8px; border: 2px solid {border_color}; background-color: #1e1e1e; margin-bottom: 15px;">
@@ -475,7 +451,7 @@ if module == "📊 Time Limit (TL) Letters & Office Tiles":
                         <hr style="margin: 5px 0 8px 0; border-color: #444;">
                         <p style="margin: 2px 0; color: #cfcfcf; font-size: 13px;">📦 Total Cases: <b>{tot}</b></p>
                         <p style="margin: 2px 0; color: #2ecc71; font-size: 13px;">🎯 Disposed: <b>{disp}</b></p>
-                        <p style="margin: 2px 0; color: #ffa500; font-size: 13px;">⏳ Pending (Not Disposed): <b>{pend}</b></p>
+                        <p style="margin: 2px 0; color: #ffa500; font-size: 13px;">⏳ Pending: <b>{pend}</b></p>
                         <p style="margin: 2px 0; color: #3498db; font-size: 13px;">✅ Replied: <b>{rep}</b></p>
                         <p style="margin: 2px 0; color: #e74c3c; font-size: 13px;">✉️ Not Replied: <b>{not_rep}</b></p>
                         <p style="margin: 2px 0; color: {'#ff4b4b' if oot > 0 else '#2ecc71'}; font-size: 13px;">🚨 TL Over: <b>{oot}</b></p>
