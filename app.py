@@ -259,8 +259,8 @@ if "jansunwai_df" not in st.session_state:
 if module == "📊 Time Limit (TL) Letters & Office Tiles":
   st.header("📊 Department & Office-wise TL Performance Analytics")
   st.markdown(
-      "Filter cases by date and view office performance with direct"
-      " click-to-view case grids."
+      "Filter cases by date and view office performance with interactive popup"
+      " grids."
   )
 
   if role == "Admin":
@@ -394,15 +394,35 @@ if module == "📊 Time Limit (TL) Letters & Office Tiles":
       "🏢 Office-wise Analytics Tiles (कार्यालय-वार विश्लेषणात्मक टाइल्स)"
   )
   st.markdown(
-      "*प्रत्येक कार्यालय की टाइल के नीचे दिए गए बटन्स पर क्लिक करके सीधे उनके"
-      " विशिष्ट मामलों की ग्रिड देखें:*"
+      "*112 कार्यालयों की टाइल्स — किसी भी विभाग के 'Not Replied' या 'TL Over'"
+      " बटन पर क्लिक करने पर केस सीधे पॉप-अप (Modal) में खुलेंगे:*"
   )
 
-  # Session state initialization for drill-down tracking
-  if "active_drill_office" not in st.session_state:
-    st.session_state.active_drill_office = None
-  if "active_drill_cat" not in st.session_state:
-    st.session_state.active_drill_cat = None
+
+  # --- STREAMLIT POPUP DIALOG FUNCTION ---
+  @st.dialog("📋 Detailed Case Grid View", width="large")
+  def show_case_popup(office_name, category):
+    st.subheader(f"🏢 Office: {office_name} [{category}]")
+    popup_df = filtered_df[filtered_df[office_col] == office_name]
+
+    if category == "Disposed":
+      popup_df = popup_df[popup_df["Is_Disposed"] == True]
+    elif category == "Replied":
+      popup_df = popup_df[popup_df["Is_Replied"] == True]
+    elif category == "Not Replied":
+      popup_df = popup_df[popup_df["Is_Not_Replied"] == True]
+    elif category == "TL Over":
+      popup_df = popup_df[popup_df["Is_TL_Over"] == True]
+
+    if not popup_df.empty:
+      st.success(f"Found `{len(popup_df)}` records.")
+      st.dataframe(popup_df, use_container_width=True)
+    else:
+      st.warning("No records found for this category.")
+
+    if st.button("Close Popup"):
+      st.rerun()
+
 
   if office_col and not office_summary.empty:
     num_cols = 3
@@ -425,66 +445,29 @@ if module == "📊 Time Limit (TL) Letters & Office Tiles":
           border_color = "red" if oot > 0 or not_rep > 0 else "#2ecc71"
           st.markdown(
               f"""
-                    <div style="padding: 12px; border-radius: 8px; border: 2px solid {border_color}; margin-bottom: 5px;">
-                        <h4 style="margin: 0; font-size: 15px;">{off_name}</h4>
-                        <hr style="margin: 4px 0 6px 0; border-color: #888;">
-                        <p style="margin: 2px 0; font-size: 12px;">📦 Total Cases: <b>{tot}</b></p>
-                        <p style="margin: 2px 0; color: #2ecc71; font-size: 12px;">🎯 Disposed: <b>{disp}</b></p>
-                        <p style="margin: 2px 0; color: #3498db; font-size: 12px;">✅ Replied: <b>{rep}</b></p>
-                        <p style="margin: 2px 0; color: #e74c3c; font-size: 12px;">✉️ Not Replied: <b>{not_rep}</b></p>
-                        <p style="margin: 2px 0; color: {'#ff4b4b' if oot > 0 else '#2ecc71'}; font-size: 12px;">🚨 TL Over: <b>{oot}</b></p>
+                    <div style="padding: 10px; border-radius: 8px; border: 2px solid {border_color}; margin-bottom: 5px;">
+                        <h4 style="margin: 0; font-size: 14px;">{off_name}</h4>
+                        <hr style="margin: 3px 0 5px 0; border-color: #888;">
+                        <p style="margin: 2px 0; font-size: 12px;">📦 Total: <b>{tot}</b> | 🎯 Disp: <b>{disp}</b></p>
+                        <p style="margin: 2px 0; font-size: 12px;">✅ Rep: <b>{rep}</b> | ✉️ Not Rep: <b style="color:#e74c3c;">{not_rep}</b></p>
+                        <p style="margin: 2px 0; font-size: 12px; color: {'#ff4b4b' if oot > 0 else '#2ecc71'};">🚨 TL Over: <b>{oot}</b></p>
                     </div>
                     """,
               unsafe_allow_html=True,
           )
 
-          # --- DIRECT ACTION BUTTONS FOR EACH TILE ---
-          b_col1, b_col2, b_col3 = st.columns(3)
-          if b_col1.button("📋 All", key=f"tot_{off_name}"):
-            st.session_state.active_drill_office = off_name
-            st.session_state.active_drill_cat = "All Cases"
-          if b_col2.button(f"✉️ Not Rep ({not_rep})", key=f"nr_{off_name}"):
-            st.session_state.active_drill_office = off_name
-            st.session_state.active_drill_cat = "Not Replied"
-          if b_col3.button(f"🚨 TL Over ({oot})", key=f"tlo_{off_name}"):
-            st.session_state.active_drill_office = off_name
-            st.session_state.active_drill_cat = "TL Over"
-          st.markdown("<br>", unsafe_allow_html=True)
-
-    # --- DRILL-DOWN GRID DISPLAY BASED ON BUTTON CLICK ---
-    st.markdown("---")
-    if st.session_state.active_drill_office:
-      sel_off = st.session_state.active_drill_office
-      sel_cat = st.session_state.active_drill_cat
-
-      col_h1, col_h2 = st.columns([4, 1])
-      with col_h1:
-        st.subheader(f"🔍 Drill-down Details: `{sel_off}` [{sel_cat}]")
-      with col_h2:
-        if st.button("❌ Close Grid"):
-          st.session_state.active_drill_office = None
-          st.rerun()
-
-      drill_df = filtered_df[filtered_df[office_col] == sel_off]
-      if sel_cat == "Disposed":
-        drill_df = drill_df[drill_df["Is_Disposed"] == True]
-      elif sel_cat == "Replied":
-        drill_df = drill_df[drill_df["Is_Replied"] == True]
-      elif sel_cat == "Not Replied":
-        drill_df = drill_df[drill_df["Is_Not_Replied"] == True]
-      elif sel_cat == "TL Over":
-        drill_df = drill_df[drill_df["Is_TL_Over"] == True]
-
-      if not drill_df.empty:
-        st.success(f"Showing `{len(drill_df)}` records for {sel_off}.")
-        st.dataframe(drill_df, use_container_width=True)
-      else:
-        st.warning(f"No records found under '{sel_cat}' for {sel_off}.")
-    else:
-      st.info(
-          "💡 **Tip:** Click on any office's action buttons (e.g. `Not Replied`"
-          " or `TL Over`) above to instantly view their detailed case grid."
-      )
+          # --- POPUP TRIGGER BUTTONS ---
+          b1, b2, b3 = st.columns(3)
+          if b1.button("📋 All", key=f"tot_{off_name}"):
+            show_case_popup(off_name, "All Cases")
+          if b2.button(f"✉️ Not Rep ({not_rep})", key=f"nr_{off_name}"):
+            show_case_popup(off_name, "Not Replied")
+          if b3.button(f"🚨 TLO ({oot})", key=f"tlo_{off_name}"):
+            show_case_popup(off_name, "TL Over")
+          st.markdown(
+              "<div style='margin-bottom: 10px;'></div>",
+              unsafe_allow_html=True,
+          )
   else:
     st.warning("⚠️ Office column not detected for generating analytical tiles.")
 
