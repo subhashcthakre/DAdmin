@@ -260,7 +260,7 @@ if module == "📊 Time Limit (TL) Letters & Office Tiles":
   st.header("📊 Department & Office-wise TL Performance Analytics")
   st.markdown(
       "Filter cases by date and view comprehensive office-wise analytical"
-      " tiles."
+      " tiles with interactive drill-down."
   )
 
   if role == "Admin":
@@ -313,12 +313,7 @@ if module == "📊 Time Limit (TL) Letters & Office Tiles":
   else:
     filtered_df = df
 
-  st.info(
-      f"🔍 Showing analytics from **{from_date}** to **{to_date}** | Total"
-      f" Filtered Records: `{len(filtered_df)}`"
-  )
-
-  # --- STRICT STATUS PARSING LOGIC ---
+  # --- STRICT STATUS & DRILL-DOWN LOGIC FLAGS ---
   if office_col:
     status_series = (
         filtered_df["Status"].astype(str).str.strip()
@@ -326,23 +321,17 @@ if module == "📊 Time Limit (TL) Letters & Office Tiles":
         else pd.Series([""] * len(filtered_df))
     )
 
-    # 1. Disposed: केवल तभी जब स्टेटस में स्पष्ट रूप से Disposed/Closed/Resolved हो
     filtered_df["Is_Disposed"] = status_series.str.contains(
         r"\b(Disposed|Closed|Resolved)\b", case=False, na=False, regex=True
     )
-
-    # 2. Replied: जब स्टेटस की शुरुआत 'Replied' से होती है (यानी जवाब दिया जा चुका है)
     filtered_df["Is_Replied"] = status_series.str.startswith(
         "Replied", na=False
     )
-
-    # 3. Not Replied: जब स्टेटस 'Not Replied' है (और Disposed नहीं है)
     filtered_df["Is_Not_Replied"] = (
         status_series.str.contains("Not Replied", case=False, na=False)
         | (status_series == "")
     ) & ~filtered_df["Is_Disposed"]
 
-    # 4. Time Limit Over: यदि TL Date आज से पहले की है और केस अभी तक 'Not Replied' है
     today_date = datetime.date.today()
     if "TL Date" in filtered_df.columns:
       filtered_df["Parsed_TL_Date"] = pd.to_datetime(
@@ -354,7 +343,6 @@ if module == "📊 Time Limit (TL) Letters & Office Tiles":
     else:
       filtered_df["Is_TL_Over"] = False
 
-    # ऑफिस-वाइज समरी ग्रुपिंग
     office_summary = (
         filtered_df.groupby(office_col)
         .agg(
@@ -369,7 +357,7 @@ if module == "📊 Time Limit (TL) Letters & Office Tiles":
   else:
     office_summary = pd.DataFrame()
 
-  # --- AGGREGATE TOP METRICS FOR GIST (Pending to Dispose को पूरी तरह से हटा दिया गया है) ---
+  # --- AGGREGATE TOP METRICS ---
   total_cases_sum = (
       office_summary["Total_Cases"].sum()
       if not office_summary.empty
@@ -390,7 +378,6 @@ if module == "📊 Time Limit (TL) Letters & Office Tiles":
       office_summary["TL_Over"].sum() if not office_summary.empty else 0
   )
 
-  # Top Gist Metrics Cards (अब 5 मुख्य कॉलम बिना Pending के)
   m1, m2, m3, m4, m5 = st.columns(5)
   m1.metric("📦 Total", int(total_cases_sum))
   m2.metric("🎯 Disposed", int(total_disposed_sum))
@@ -407,8 +394,33 @@ if module == "📊 Time Limit (TL) Letters & Office Tiles":
   st.subheader(
       "🏢 Office-wise Analytics Tiles (कार्यालय-वार विश्लेषणात्मक टाइल्स)"
   )
+  st.markdown(
+      "*नीचे दिए गए कार्यालयों में से किसी भी विभाग का चयन करके उसके विशिष्ट मामलों"
+      " की ग्रिड देखें:*"
+  )
 
+  # --- INTERACTIVE DRILL-DOWN SELECTOR ---
   if office_col and not office_summary.empty:
+    # ऑफिस चुनने के लिए ड्रॉपडाउन और किस प्रकार का केस देखना है उसका चयन
+    col_sel1, col_sel2 = st.columns(2)
+    with col_sel1:
+      selected_office = st.selectbox(
+          "🏢 Select Department / Office for Drill-down",
+          ["-- Select Office --"] + list(office_summary[office_col].unique()),
+      )
+    with col_sel2:
+      selected_category = st.selectbox(
+          "📂 Select Case Category",
+          [
+              "All Cases",
+              "Disposed",
+              "Replied",
+              "Not Replied",
+              "Time Limit Over (TL Over)",
+          ],
+      )
+
+    # ऑफिस-वाइज टाइल्स का डिस्प्ले
     num_cols = 3
     rows = [
         office_summary.iloc[i : i + num_cols]
@@ -441,13 +453,41 @@ if module == "📊 Time Limit (TL) Letters & Office Tiles":
                     """,
               unsafe_allow_html=True,
           )
+
+    # --- DRILL-DOWN GRID DISPLAY ---
+    st.markdown("---")
+    if selected_office != "-- Select Office --":
+      st.subheader(
+          f"🔍 Drill-down Details for: `{selected_office}` [{selected_category}]"
+      )
+      # संबंधित ऑफिस का डेटा फिल्टर करें
+      drill_df = filtered_df[filtered_df[office_col] == selected_office]
+
+      if selected_category == "Disposed":
+        drill_df = drill_df[drill_df["Is_Disposed"] == True]
+      elif selected_category == "Replied":
+        drill_df = drill_df[drill_df["Is_Replied"] == True]
+      elif selected_category == "Not Replied":
+        drill_df = drill_df[drill_df["Is_Not_Replied"] == True]
+      elif selected_category == "Time Limit Over (TL Over)":
+        drill_df = drill_df[drill_df["Is_TL_Over"] == True]
+
+      if not drill_df.empty:
+        st.success(f"Found `{len(drill_df)}` cases matching the selection.")
+        st.dataframe(drill_df, use_container_width=True)
+      else:
+        st.warning("No cases found for this specific category in the selected office.")
+    else:
+      st.info(
+          "💡 Tip: Select a department and category from the dropdown above to"
+          " view specific case details in a grid."
+      )
   else:
     st.warning("⚠️ Office column not detected for generating analytical tiles.")
 
   st.markdown("---")
-  st.subheader("📋 Filtered Detailed Data Table")
+  st.subheader("📋 Complete Filtered Detailed Data Table")
   st.dataframe(filtered_df, use_container_width=True)
-
 # --- MODULE 2: JANSUNWAI TRACKER ---
 elif module == "📞 Jansunwai Tracker":
   st.header("📞 Jansunwai Grievance Management Gist")
