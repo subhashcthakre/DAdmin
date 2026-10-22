@@ -257,9 +257,9 @@ if "tl_df" not in st.session_state:
             "15/02/2026",
         ],
         "Total Cases": [120, 95, 150, 60, 45, 80, 110, 70],
-        "Replied Cases": [100, 80, 140, 45, 35, 75, 90, 60],
-        "Pending Cases": [20, 15, 10, 15, 10, 5, 20, 10],
         "Disposed Cases": [100, 80, 140, 45, 35, 75, 90, 60],
+        "Replied Cases": [90, 75, 130, 40, 30, 70, 85, 55],
+        "Not Replied Cases": [10, 5, 10, 5, 5, 5, 5, 5],
         "Time Limit Over Cases": [3, 5, 1, 6, 2, 0, 4, 2],
     }
     st.session_state.tl_df = pd.DataFrame(sample_data)
@@ -300,7 +300,7 @@ if module == "📊 Time Limit (TL) Letters & Office Tiles":
 
   df = st.session_state.tl_df.copy()
 
-  # --- DATE PICKER FILTER (कब से देखना है) ---
+  # --- DATE PICKER FILTER ---
   st.markdown("---")
   col_d1, col_d2 = st.columns(2)
   with col_d1:
@@ -338,69 +338,106 @@ if module == "📊 Time Limit (TL) Letters & Office Tiles":
       f" Filtered Records: `{len(filtered_df)}`"
   )
 
-  # --- OFFICE SUMMARY PREPARATION FIRST (ताकि मुख्य मेट्रिक्स सही योग दिखा सकें) ---
+  # --- AUTOMATIC CALCULATION OF METRICS IF COLUMNS ARE RAW ROWS ---
+  # यदि एक्सेल में व्यक्तिगत रो (Rows) हैं, तो उन्हें समरी में बदलें
   if office_col:
+    # Check if summary columns exist, else calculate dynamically
     if "Total Cases" not in filtered_df.columns:
+      # Each row is a single case/letter
+      filtered_df["Total_Cases_Val"] = 1
+      # Check if disposed/replied columns exist
+      disp_col_match = next(
+          (
+              c
+              for c in filtered_df.columns
+              if "dispose" in c.lower() or "status" in c.lower()
+          ),
+          None,
+      )
+      filtered_df["Disposed_Val"] = (
+          1
+          if disp_col_match
+          and filtered_df[disp_col_match]
+          .astype(str)
+          .str.contains("dispose|yes|resolved", case=False, na=False)
+          .any()
+          else 0
+      )
+      filtered_df["Pending_Val"] = filtered_df["Total_Cases_Val"] - 1  # Dummy
+
       office_summary = (
           filtered_df.groupby(office_col)
           .agg(
               Total_Cases=(office_col, "count"),
-              Pending_Cases=(office_col, "count"),
               Disposed_Cases=(office_col, "count"),
               Replied_Cases=(office_col, "count"),
-              TL_Over=(office_col, "count"),
+              Not_Replied_Cases=(office_col, lambda x: 0),
+              Pending_Cases=(office_col, lambda x: 0),  # Not Disposed
+              TL_Over=(office_col, lambda x: 0),
           )
           .reset_index()
       )
     else:
+      # If columns like Total Cases, Disposed Cases already exist in uploaded excel
       office_summary = (
           filtered_df.groupby(office_col)
           .agg(
               Total_Cases=("Total Cases", "sum"),
-              Replied_Cases=("Replied Cases", "sum")
-              if "Replied Cases" in filtered_df.columns
-              else (office_col, "count"),
-              Pending_Cases=("Pending Cases", "sum")
-              if "Pending Cases" in filtered_df.columns
-              else (office_col, "count"),
               Disposed_Cases=("Disposed Cases", "sum")
               if "Disposed Cases" in filtered_df.columns
               else (office_col, "count"),
+              Replied_Cases=("Replied Cases", "sum")
+              if "Replied Cases" in filtered_df.columns
+              else (office_col, "count"),
+              Not_Replied_Cases=("Not Replied Cases", "sum")
+              if "Not Replied Cases" in filtered_df.columns
+              else (office_col, lambda x: 0),
               TL_Over=("Time Limit Over Cases", "sum")
               if "Time Limit Over Cases" in filtered_df.columns
-              else (office_col, "count"),
+              else (office_col, lambda x: 0),
           )
           .reset_index()
       )
+
+    # Pending Cases = Total Cases - Disposed Cases (अति आवश्यक नियम)
+    office_summary["Pending_Cases"] = (
+        office_summary["Total_Cases"] - office_summary["Disposed_Cases"]
+    )
   else:
     office_summary = pd.DataFrame()
 
-  # --- AGGREGATE METRICS FOR GIST ---
+  # --- AGGREGATE TOP METRICS FOR GIST ---
   total_cases_sum = (
-      filtered_df["Total Cases"].sum()
-      if "Total Cases" in filtered_df.columns
+      office_summary["Total_Cases"].sum()
+      if not office_summary.empty
       else len(filtered_df)
   )
+  total_disposed_sum = (
+      office_summary["Disposed_Cases"].sum() if not office_summary.empty else 0
+  )
   total_pending_sum = (
-      filtered_df["Pending Cases"].sum()
-      if "Pending Cases" in filtered_df.columns
+      office_summary["Pending_Cases"].sum() if not office_summary.empty else 0
+  )
+  total_replied_sum = (
+      office_summary["Replied_Cases"].sum() if not office_summary.empty else 0
+  )
+  total_not_replied_sum = (
+      office_summary["Not_Replied_Cases"].sum()
+      if not office_summary.empty
       else 0
   )
+  total_oot_sum = (
+      office_summary["TL_Over"].sum() if not office_summary.empty else 0
+  )
 
-  if not office_summary.empty and "TL_Over" in office_summary.columns:
-    total_oot_sum = office_summary["TL_Over"].sum()
-  else:
-    total_oot_sum = (
-        filtered_df["Time Limit Over Cases"].sum()
-        if "Time Limit Over Cases" in filtered_df.columns
-        else 0
-    )
-
-  c1, c2, c3 = st.columns(3)
-  c1.metric("📦 Filtered Total Cases", int(total_cases_sum))
-  c2.metric("⏳ Total Pending Cases", int(total_pending_sum))
-  c3.metric(
-      "🚨 Time Limit Over (Red Alert)",
+  # Top Gist Metrics Cards
+  m1, m2, m3, m4, m5 = st.columns(5)
+  m1.metric("📦 Total Cases", int(total_cases_sum))
+  m2.metric("🎯 Disposed", int(total_disposed_sum))
+  m3.metric("⏳ Pending", int(total_pending_sum))
+  m4.metric("✉️ Not Replied", int(total_not_replied_sum))
+  m5.metric(
+      "🚨 TL Over",
       int(total_oot_sum),
       delta="Critical",
       delta_color="inverse",
@@ -423,22 +460,24 @@ if module == "📊 Time Limit (TL) Letters & Office Tiles":
       for idx, (_, row) in enumerate(row_chunk.iterrows()):
         off_name = row[office_col]
         tot = row["Total_Cases"]
-        rep = row["Replied_Cases"]
-        pend = row["Pending_Cases"]
         disp = row["Disposed_Cases"]
+        pend = row["Pending_Cases"]
+        rep = row["Replied_Cases"]
+        not_rep = row["Not_Replied_Cases"]
         oot = row["TL_Over"]
 
         with cols[idx]:
-          border_color = "red" if oot > 0 else "#2ecc71"
+          border_color = "red" if oot > 0 or pend > 5 else "#2ecc71"
           st.markdown(
               f"""
                     <div style="padding: 15px; border-radius: 8px; border: 2px solid {border_color}; background-color: #1e1e1e; margin-bottom: 15px;">
                         <h4 style="margin: 0; color: #ffffff; font-size: 16px;">{off_name}</h4>
                         <hr style="margin: 5px 0 8px 0; border-color: #444;">
                         <p style="margin: 2px 0; color: #cfcfcf; font-size: 13px;">📦 Total Cases: <b>{tot}</b></p>
-                        <p style="margin: 2px 0; color: #3498db; font-size: 13px;">✅ Replied: <b>{rep}</b></p>
                         <p style="margin: 2px 0; color: #2ecc71; font-size: 13px;">🎯 Disposed: <b>{disp}</b></p>
-                        <p style="margin: 2px 0; color: #ffa500; font-size: 13px;">⏳ Pending: <b>{pend}</b></p>
+                        <p style="margin: 2px 0; color: #ffa500; font-size: 13px;">⏳ Pending (Not Disposed): <b>{pend}</b></p>
+                        <p style="margin: 2px 0; color: #3498db; font-size: 13px;">✅ Replied: <b>{rep}</b></p>
+                        <p style="margin: 2px 0; color: #e74c3c; font-size: 13px;">✉️ Not Replied: <b>{not_rep}</b></p>
                         <p style="margin: 2px 0; color: {'#ff4b4b' if oot > 0 else '#2ecc71'}; font-size: 13px;">🚨 TL Over: <b>{oot}</b></p>
                     </div>
                     """,
