@@ -11,14 +11,14 @@ st.set_page_config(
     layout="wide",
 )
 
-# --- COMPLETE OFFICER DIRECTORY & PASSWORD HASHING/MAPPING ---
-# Default password for all officers for initial setup: Balaghat@2026
+# --- UPLOAD ADMIN CONFIGURATION (केवल अधिकृत यूज़र ही अपलोड कर सकेंगे) ---
 ADMIN_UPL_EMAILS = [
     "loksevabalaghat@gmail.com",
     "dmbalaghat@nic.in",
     "dio-bgt@nic.in",
 ]
 
+# --- 112 अधिकारी डायरेक्टरी ---
 OFFICER_DIRECTORY = {
     "dmbalaghat@nic.in": "DM Balaghat / OIC Establishment / OIC Reader",
     "loksevabalaghat@gmail.com": "Anil Kumar Lilhare (DMPSM)",
@@ -160,7 +160,6 @@ if not st.session_state.authenticated:
 
       if submit_button:
         email_clean = email_input.strip().lower()
-        # Default secure password check (Password: Balaghat@2026)
         if password_input == "Balaghat@2026":
           if email_clean in ADMIN_UPL_EMAILS:
             st.session_state.authenticated = True
@@ -182,12 +181,11 @@ if not st.session_state.authenticated:
           st.error("❌ Incorrect Password. (Default setup password: Balaghat@2026)")
   st.stop()
 
-# --- IF AUTHENTICATED ---
+# --- AUTHENTICATED SESSION ---
 current_user = st.session_state.user_email
 role = st.session_state.user_role
 officer_title = OFFICER_DIRECTORY.get(current_user, "District Officer")
 
-# --- HEADER & SIDEBAR ---
 st.title("🏛️ District Administration Intelligence Portal - Balaghat")
 st.markdown(
     "*Zero-Cost Decision Support System for Collectorate Review Meetings*"
@@ -217,7 +215,7 @@ module = st.sidebar.radio(
     ],
 )
 
-# --- SESSION STATE INITIALIZATION FOR DATA ---
+# --- SESSION STATE DEFAULT DATA ---
 if "tl_df" not in st.session_state:
   sample_data = {
       "S.No": [1, 2, 3, 4, 5, 6, 7, 8],
@@ -281,7 +279,7 @@ if "jansunwai_df" not in st.session_state:
   }
   st.session_state.jansunwai_df = pd.DataFrame(js_data)
 
-# --- MODULE 1: TIME LIMIT (TL) LETTERS ---
+# --- MODULE 1: TIME LIMIT (TL) LETTERS & REAL-TIME UPLOADER ---
 if module == "📊 Time Limit (TL) Letters":
   st.header("📊 Time Limit (TL) Letters - Department Dashboard")
   st.markdown(
@@ -289,18 +287,35 @@ if module == "📊 Time Limit (TL) Letters":
       " out-of-time-limit files."
   )
 
+  # केवल Designated Admin के लिए अपलोड का विकल्प
   if role == "Admin":
-    with st.expander("📤 Upload New Jan Akansha Excel Report"):
+    with st.expander(
+        "📤 Real-Time Excel Uploader (Jan Akansha Portal Report)", expanded=True
+    ):
+      st.info(
+          f"🔒 Logged in as Upload Admin (`{current_user}`). You can upload the"
+          " official Excel report."
+      )
       uploaded_file = st.file_uploader(
-          "Upload Excel (.xlsx)", type=["xlsx", "xls"]
+          "Upload Jan Akansha Excel File (.xlsx)", type=["xlsx", "xls"]
       )
       if uploaded_file is not None:
         try:
+          # Read Excel starting from header row
           raw_df = pd.read_excel(uploaded_file, header=1)
-          st.success("Jan Akansha Excel file successfully parsed!")
-          st.dataframe(raw_df.head(3))
+          st.success("✅ Jan Akansha Report successfully uploaded and parsed!")
+          st.dataframe(raw_df.head(5))
+
+          # Save to session state if columns match or process them
+          if "Present Office" in raw_df.columns or len(raw_df.columns) > 4:
+            st.session_state.uploaded_raw_df = raw_df
         except Exception as e:
-          st.error(f"Error reading file: {e}")
+          st.error(f"Error reading Excel file: {e}")
+  else:
+    st.info(
+        "ℹ️ File upload is restricted to designated administrative accounts"
+        " only. You have full viewing and drill-down access."
+    )
 
   df = st.session_state.tl_df.copy()
   df["Dispos %"] = (
@@ -555,5 +570,3 @@ elif module == "📋 Weekly TL Meeting Agenda":
         file_name="Collector_Review_Brief.txt",
         mime="text/plain",
     )
-
-    
