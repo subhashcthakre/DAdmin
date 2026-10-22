@@ -338,49 +338,7 @@ if module == "📊 Time Limit (TL) Letters & Office Tiles":
       f" Filtered Records: `{len(filtered_df)}`"
   )
 
- # --- AGGREGATE METRICS FOR GIST (सुधारित लॉजिक) ---
-  total_cases_sum = (
-      filtered_df["Total Cases"].sum()
-      if "Total Cases" in filtered_df.columns
-      else len(filtered_df)
-  )
-  total_pending_sum = (
-      filtered_df["Pending Cases"].sum()
-      if "Pending Cases" in filtered_df.columns
-      else 0
-  )
-
-  # यदि ऑफिस समरी बन चुकी है, तो 'TL_Over' का कुल योग सीधे ऊपर दिखाएं ताकि 0 न आए
-  if "office_summary" in locals() and "TL_Over" in office_summary.columns:
-    total_oot_sum = office_summary["TL_Over"].sum()
-  else:
-    total_oot_sum = (
-        filtered_df["Time Limit Over Cases"].sum()
-        if "Time Limit Over Cases" in filtered_df.columns
-        else 0
-    )
-  )
-  total_oot_sum = (
-      filtered_df["Time Limit Over Cases"].sum()
-      if "Time Limit Over Cases" in filtered_df.columns
-      else 0
-  )
-
-  c1, c2, c3 = st.columns(3)
-  c1.metric("📦 Filtered Total Cases", int(total_cases_sum))
-  c2.metric("⏳ Total Pending Cases", int(total_pending_sum))
-  c3.metric(
-      "🚨 Time Limit Over (Red Alert)",
-      int(total_oot_sum),
-      delta="Critical",
-      delta_color="inverse",
-  )
-
-  st.markdown("---")
-  st.subheader(
-      "🏢 Office-wise Analytics Tiles (कार्यालय-वार विश्लेषणात्मक टाइल्स)"
-  )
-
+  # --- OFFICE SUMMARY PREPARATION FIRST (ताकि मुख्य मेट्रिक्स सही योग दिखा सकें) ---
   if office_col:
     if "Total Cases" not in filtered_df.columns:
       office_summary = (
@@ -414,7 +372,46 @@ if module == "📊 Time Limit (TL) Letters & Office Tiles":
           )
           .reset_index()
       )
+  else:
+    office_summary = pd.DataFrame()
 
+  # --- AGGREGATE METRICS FOR GIST ---
+  total_cases_sum = (
+      filtered_df["Total Cases"].sum()
+      if "Total Cases" in filtered_df.columns
+      else len(filtered_df)
+  )
+  total_pending_sum = (
+      filtered_df["Pending Cases"].sum()
+      if "Pending Cases" in filtered_df.columns
+      else 0
+  )
+
+  if not office_summary.empty and "TL_Over" in office_summary.columns:
+    total_oot_sum = office_summary["TL_Over"].sum()
+  else:
+    total_oot_sum = (
+        filtered_df["Time Limit Over Cases"].sum()
+        if "Time Limit Over Cases" in filtered_df.columns
+        else 0
+    )
+
+  c1, c2, c3 = st.columns(3)
+  c1.metric("📦 Filtered Total Cases", int(total_cases_sum))
+  c2.metric("⏳ Total Pending Cases", int(total_pending_sum))
+  c3.metric(
+      "🚨 Time Limit Over (Red Alert)",
+      int(total_oot_sum),
+      delta="Critical",
+      delta_color="inverse",
+  )
+
+  st.markdown("---")
+  st.subheader(
+      "🏢 Office-wise Analytics Tiles (कार्यालय-वार विश्लेषणात्मक टाइल्स)"
+  )
+
+  if office_col and not office_summary.empty:
     num_cols = 3
     rows = [
         office_summary.iloc[i : i + num_cols]
