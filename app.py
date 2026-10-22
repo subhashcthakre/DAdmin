@@ -63,7 +63,7 @@ OFFICER_DIRECTORY = {
     "fotsbghat@mp.gov.in": "Mr. Nithiyanantham L. (DFO South)",
     "dio-bgt@nic.in": "Subhash Chandra Thakre (DIO NIC)",
     "drbalaghat@gmail.com": "Mrs. Keerti Asati (District Registrar)",
-    "dmobalaghat.mp@gmail.com": "Vivek Tiwari (DMO Markfed)",
+    "dmobalaghat.mp.gov.in": "Vivek Tiwari (DMO Markfed)",
     "zskbalaghat2@gmail.com": "Shri G-S Barman (DPC ZSK)",
     "srlm-balaghat@mp.gov.in": "Shweta Mehto (DPM NRLM)",
     "dpobalaghat@rediffmail.com": "Shri Deepak Rana (DPO Pension & Treasury)",
@@ -209,7 +209,7 @@ st.sidebar.subheader("📂 Modules")
 module = st.sidebar.radio(
     "Select Module",
     [
-        "📊 Time Limit (TL) Letters",
+        "📊 Time Limit (TL) Letters & Office Tiles",
         "📞 Jansunwai Tracker",
         "🗺️ Geo-Drilldown & GIS Map",
         "📋 Weekly TL Meeting Agenda",
@@ -218,67 +218,26 @@ module = st.sidebar.radio(
 
 DATA_FILE = "latest_tl_data.csv"
 
-# Load persistent data or default sample data with Date Check capability
+# Load persistent data or default sample data
 if "tl_df" not in st.session_state:
   if os.path.exists(DATA_FILE):
     st.session_state.tl_df = pd.read_csv(DATA_FILE)
   else:
     sample_data = {
         "S.No": [1, 2, 3, 4, 5, 6, 7, 8],
-        "Sub-Division": [
-            "Balaghat",
-            "Balaghat",
-            "Katangi",
-            "Balaghat",
-            "Baihar",
-            "Waraseoni",
-            "Kirnapur",
-            "Lanji",
-        ],
-        "Tahsil": [
-            "Balaghat",
-            "Balaghat",
-            "Katangi",
-            "Balaghat",
-            "Baihar",
-            "Waraseoni",
-            "Kirnapur",
-            "Lanji",
-        ],
         "Name of Office": [
-            "ADM",
-            "CEO ZP BALAGHAT",
-            "CMHO",
-            "PO DUDA",
-            "SDM_Baihar",
-            "SDM_Waraseoni",
-            "SE MPEB",
-            "TD_Lanji",
+            "CMHO (Health)",
+            "DEO (Education)",
+            "CEO ZP Balaghat",
+            "EE PWD",
+            "EE PHE",
+            "EE RES",
+            "DPO WCD",
+            "DDA Agriculture",
         ],
         "Received Letters": [120, 95, 150, 60, 45, 80, 110, 70],
-        "Disposed Letters": [100, 85, 120, 50, 40, 65, 90, 55],
-        "Pending Letters": [20, 10, 30, 10, 5, 15, 20, 15],
-        "Out of Time Limit": [3, 1, 5, 2, 0, 3, 4, 2],
-        "TL Date": [
-            "2026-10-19",
-            "2026-10-19",
-            "2026-10-19",
-            "2026-10-19",
-            "2026-10-19",
-            "2026-10-19",
-            "2026-10-19",
-            "2026-10-19",
-        ],
-        "Marked Date": [
-            "2026-10-18",
-            "2026-10-23",
-            "2026-10-15",
-            "2026-10-20",
-            "2026-10-18",
-            "2026-10-19",
-            "2026-10-22",
-            "2026-10-17",
-        ],
+        "Pending Letters": [5, 12, 3, 10, 8, 2, 15, 6],
+        "Out of Time Limit": [1, 3, 0, 4, 2, 0, 5, 1],
     }
     st.session_state.tl_df = pd.DataFrame(sample_data)
 
@@ -294,12 +253,12 @@ if "jansunwai_df" not in st.session_state:
   }
   st.session_state.jansunwai_df = pd.DataFrame(js_data)
 
-# --- MODULE 1: TIME LIMIT (TL) LETTERS & RED ALERT ENGINE ---
-if module == "📊 Time Limit (TL) Letters":
-  st.header("📊 Time Limit (TL) Letters - Executive Gist Dashboard")
+# --- MODULE 1: TIME LIMIT LETTERS & OFFICE-WISE TILES ---
+if module == "📊 Time Limit (TL) Letters & Office Tiles":
+  st.header("📊 Department & Office-wise TL Performance Tiles")
   st.markdown(
-      "Monitor departmental disposal efficiency, Red Alerts for Time Limit"
-      " Over cases, and Date Discrepancy Warnings."
+      "Quick executive summary cards (Tiles) for each district office to"
+      " monitor pending letters and Red Alerts."
   )
 
   if role == "Admin":
@@ -312,73 +271,77 @@ if module == "📊 Time Limit (TL) Letters":
           raw_df = pd.read_excel(uploaded_file, header=1)
           raw_df.to_csv(DATA_FILE, index=False)
           st.session_state.tl_df = raw_df
-          st.success("✅ File uploaded and broadcasted successfully!")
+          st.success("✅ File uploaded and synced across all dashboards!")
         except Exception as e:
           st.error(f"Error: {e}")
 
   df = st.session_state.tl_df.copy()
 
-  # --- GIST TOP METRICS CARDS ---
-  total_rec = (
-      df["Received Letters"].sum() if "Received Letters" in df.columns else 640
+  # Top Gist Metrics
+  tot_rec = (
+      df["Received Letters"].sum() if "Received Letters" in df.columns else 730
   )
-  total_pend = (
-      df["Pending Letters"].sum() if "Pending Letters" in df.columns else 105
+  tot_pend = (
+      df["Pending Letters"].sum() if "Pending Letters" in df.columns else 61
   )
-  total_oot = (
+  tot_oot = (
       df["Out of Time Limit"].sum()
       if "Out of Time Limit" in df.columns
-      else 20
+      else 16
   )
 
-  c1, c2, c3, c4 = st.columns(4)
-  c1.metric("📦 Total TL Received", int(total_rec))
-  c2.metric("⏳ Total Pending", int(total_pend))
+  c1, c2, c3 = st.columns(3)
+  c1.metric("📦 Total TL Received", int(tot_rec))
+  c2.metric("⏳ Total Pending", int(tot_pend))
   c3.metric(
-      "🚨 Out of TL (Red Alert)",
-      int(total_oot),
+      "🚨 Total Out of TL (Red Alert)",
+      int(tot_oot),
       delta="Action Required",
       delta_color="inverse",
   )
 
-  # --- AUTOMATIC DATE ERROR & RED ALERT CHECK ---
-  if "TL Date" in df.columns and "Marked Date" in df.columns:
-    try:
-      df["TL_Dt"] = pd.to_datetime(df["TL Date"], errors="coerce")
-      df["Mkd_Dt"] = pd.to_datetime(df["Marked Date"], errors="coerce")
-      # Error Condition: Marked Date > TL Date (Data entry error)
-      df["Date_Error"] = df["Mkd_Dt"] > df["TL_Dt"]
-    except Exception:
-      df["Date_Error"] = False
-  else:
-    # Fallback simulation if columns are missing
-    df["Date_Error"] = [
-        False,
-        True,
-        False,
-        True,
-        False,
-        False,
-        True,
-        False,
-    ]  # Mocking error checks
+  st.markdown("---")
+  st.subheader("🏢 Office-wise Performance Tiles (विभाग-वार टाइल्स)")
 
-  # Highlight rows with Data Entry Error (Marked Date > TL Date)
-  error_rows = df[df["Date_Error"] == True]
-  if not error_rows.empty:
-    st.error(
-        "⚠️ **DATA ENTRY ERROR DETECTED!** The following TL items have "
-        "**Marked Date greater than TL Date** (Future/Invalid Entry):"
-    )
-    st.dataframe(error_rows, use_container_width=True)
+  # Render Office-wise Tiles using Streamlit Columns (3 per row)
+  if "Name of Office" in df.columns:
+    num_cols = 3
+    rows = [
+        df.iloc[i : i + num_cols] for i in range(0, len(df), num_cols)
+    ]
+
+    for row_chunk in rows:
+      cols = st.columns(num_cols)
+      for idx, (_, row) in enumerate(row_chunk.iterrows()):
+        office_name = row.get("Name of Office", "Department")
+        rec = row.get("Received Letters", 0)
+        pend = row.get("Pending Letters", 0)
+        oot = row.get("Out of Time Limit", 0)
+
+        with cols[idx]:
+          # Custom card styling based on alert status
+          border_color = "red" if oot > 2 else "green"
+          st.markdown(
+              f"""
+                    <div style="padding: 15px; border-radius: 8px; border: 2px solid {border_color}; background-color: #1e1e1e; margin-bottom: 15px;">
+                        <h4 style="margin: 0; color: #ffffff;">{office_name}</h4>
+                        <hr style="margin: 5px 0 10px 0; border-color: #444;">
+                        <p style="margin: 3px 0; color: #cfcfcf;">📦 Received: <b>{rec}</b></p>
+                        <p style="margin: 3px 0; color: #ffa500;">⏳ Pending: <b>{pend}</b></p>
+                        <p style="margin: 3px 0; color: {'#ff4b4b' if oot > 0 else '#2ecc71'};">🚨 Out of TL: <b>{oot}</b></p>
+                    </div>
+                    """,
+              unsafe_allow_html=True,
+          )
   else:
-    st.success(
-        "✅ No date discrepancy found (All Marked Dates are valid/less than or"
-        " equal to TL Date)."
+    st.info(
+        "Columns 'Name of Office' not found in current dataset. Showing raw"
+        " table view below:"
     )
+    st.dataframe(df, use_container_width=True)
 
   st.markdown("---")
-  st.subheader("📋 Department-wise Summary & Red Alert Status")
+  st.subheader("📋 Complete Department Data Table")
   st.dataframe(df, use_container_width=True)
 
 # --- MODULE 2: JANSUNWAI TRACKER ---
