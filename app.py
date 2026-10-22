@@ -338,7 +338,7 @@ if module == "📊 Time Limit (TL) Letters & Office Tiles":
       f" Filtered Records: `{len(filtered_df)}`"
   )
 
-  # --- AGGREGATE METRICS FOR GIST ---
+ # --- AGGREGATE METRICS FOR GIST (सुधारित लॉजिक) ---
   total_cases_sum = (
       filtered_df["Total Cases"].sum()
       if "Total Cases" in filtered_df.columns
@@ -348,6 +348,17 @@ if module == "📊 Time Limit (TL) Letters & Office Tiles":
       filtered_df["Pending Cases"].sum()
       if "Pending Cases" in filtered_df.columns
       else 0
+  )
+
+  # यदि ऑफिस समरी बन चुकी है, तो 'TL_Over' का कुल योग सीधे ऊपर दिखाएं ताकि 0 न आए
+  if "office_summary" in locals() and "TL_Over" in office_summary.columns:
+    total_oot_sum = office_summary["TL_Over"].sum()
+  else:
+    total_oot_sum = (
+        filtered_df["Time Limit Over Cases"].sum()
+        if "Time Limit Over Cases" in filtered_df.columns
+        else 0
+    )
   )
   total_oot_sum = (
       filtered_df["Time Limit Over Cases"].sum()
