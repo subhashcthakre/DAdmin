@@ -328,13 +328,14 @@ if module == "📊 Time Limit (TL) Letters & Office Tiles":
       office_col = col_cand
       break
 
-  # dayfirst=True का उपयोग ताकि DD/MM/YYYY सही से पार्स हो सके
+  # dayfirst=True के साथ तारीख पार्सिंग
   if "Marked Date" in df.columns and office_col:
-    df["Parsed_Date"] = pd.to_datetime(
+    df["Parsed_Marked_Date"] = pd.to_datetime(
         df["Marked Date"], errors="coerce", dayfirst=True
     ).dt.date
     filtered_df = df[
-        (df["Parsed_Date"] >= from_date) & (df["Parsed_Date"] <= to_date)
+        (df["Parsed_Marked_Date"] >= from_date)
+        & (df["Parsed_Marked_Date"] <= to_date)
     ]
   else:
     filtered_df = df
@@ -344,8 +345,9 @@ if module == "📊 Time Limit (TL) Letters & Office Tiles":
       f" Filtered Records: `{len(filtered_df)}`"
   )
 
-  # --- STATUS COLUMN PARSING & CALCULATIONS ---
+  # --- AUTOMATIC STATUS & TL OVER CALCULATION (अचूक लॉजिक) ---
   if office_col:
+    # 1. Status Check (Replied vs Not Replied)
     if "Status" in filtered_df.columns:
       filtered_df["Is_Replied"] = (
           filtered_df["Status"].astype(str).str.startswith("Replied", na=False)
@@ -359,26 +361,38 @@ if module == "📊 Time Limit (TL) Letters & Office Tiles":
       filtered_df["Is_Replied"] = False
       filtered_df["Is_Not_Replied"] = True
 
-    # समरी तैयार करें
+    # 2. Disposed Check (यदि स्टेटस में Replied है या कोई अन्य कॉलम है)
+    filtered_df["Is_Disposed"] = filtered_df["Is_Replied"]
+
+    # 3. TL Over Check: यदि TL Date आज से पहले की है और केस Not Replied है
+    today_date = datetime.date.today()
+    if "TL Date" in filtered_df.columns:
+      filtered_df["Parsed_TL_Date"] = pd.to_datetime(
+          filtered_df["TL Date"], errors="coerce", dayfirst=True
+      ).dt.date
+      filtered_df["Is_TL_Over"] = (
+          filtered_df["Parsed_TL_Date"] < today_date
+      ) & filtered_df["Is_Not_Replied"]
+    else:
+      filtered_df["Is_TL_Over"] = False
+
+    # ऑफिस-वाइज ग्रुपिंग और समरी
     office_summary = (
         filtered_df.groupby(office_col)
         .agg(
             Total_Cases=(office_col, "count"),
+            Disposed_Cases=("Is_Disposed", "sum"),
             Replied_Cases=("Is_Replied", "sum"),
             Not_Replied_Cases=("Is_Not_Replied", "sum"),
-            TL_Over=(
-                "Time Limit Over Cases",
-                "sum",
-            )
-            if "Time Limit Over Cases" in filtered_df.columns
-            else (office_col, lambda x: 0),
+            TL_Over=("Is_TL_Over", "sum"),
         )
         .reset_index()
     )
 
-    # नियम: Pending = Total - Replied (या Not Replied)
-    office_summary["Pending_Cases"] = office_summary["Not_Replied_Cases"]
-    office_summary["Disposed_Cases"] = office_summary["Replied_Cases"]
+    # नियम: Pending to Dispose = Total Cases - Disposed Cases
+    office_summary["Pending_To_Dispose"] = (
+        office_summary["Total_Cases"] - office_summary["Disposed_Cases"]
+    )
   else:
     office_summary = pd.DataFrame()
 
@@ -392,7 +406,9 @@ if module == "📊 Time Limit (TL) Letters & Office Tiles":
       office_summary["Disposed_Cases"].sum() if not office_summary.empty else 0
   )
   total_pending_sum = (
-      office_summary["Pending_Cases"].sum() if not office_summary.empty else 0
+      office_summary["Pending_To_Dispose"].sum()
+      if not office_summary.empty
+      else 0
   )
   total_replied_sum = (
       office_summary["Replied_Cases"].sum() if not office_summary.empty else 0
@@ -406,13 +422,14 @@ if module == "📊 Time Limit (TL) Letters & Office Tiles":
       office_summary["TL_Over"].sum() if not office_summary.empty else 0
   )
 
-  # Top Gist Metrics Cards
-  m1, m2, m3, m4, m5 = st.columns(5)
-  m1.metric("📦 Total Cases", int(total_cases_sum))
+  # Top Gist Metrics Cards (अब इसमें 'Pending to Dispose' और सही 'TL Over' दिखेगा)
+  m1, m2, m3, m4, m5, m6 = st.columns(6)
+  m1.metric("📦 Total", int(total_cases_sum))
   m2.metric("🎯 Disposed", int(total_disposed_sum))
-  m3.metric("⏳ Pending", int(total_pending_sum))
-  m4.metric("✉️ Not Replied", int(total_not_replied_sum))
-  m5.metric(
+  m3.metric("⏳ Pending to Dispose", int(total_pending_sum))
+  m4.metric("✅ Replied", int(total_replied_sum))
+  m5.metric("✉️ Not Replied", int(total_not_replied_sum))
+  m6.metric(
       "🚨 TL Over",
       int(total_oot_sum),
       delta="Critical",
@@ -437,7 +454,7 @@ if module == "📊 Time Limit (TL) Letters & Office Tiles":
         off_name = row[office_col]
         tot = row["Total_Cases"]
         disp = row["Disposed_Cases"]
-        pend = row["Pending_Cases"]
+        pend_disp = row["Pending_To_Dispose"]
         rep = row["Replied_Cases"]
         not_rep = row["Not_Replied_Cases"]
         oot = row["TL_Over"]
@@ -451,7 +468,7 @@ if module == "📊 Time Limit (TL) Letters & Office Tiles":
                         <hr style="margin: 5px 0 8px 0; border-color: #444;">
                         <p style="margin: 2px 0; color: #cfcfcf; font-size: 13px;">📦 Total Cases: <b>{tot}</b></p>
                         <p style="margin: 2px 0; color: #2ecc71; font-size: 13px;">🎯 Disposed: <b>{disp}</b></p>
-                        <p style="margin: 2px 0; color: #ffa500; font-size: 13px;">⏳ Pending: <b>{pend}</b></p>
+                        <p style="margin: 2px 0; color: #ffa500; font-size: 13px;">⏳ Pending to Dispose: <b>{pend_disp}</b></p>
                         <p style="margin: 2px 0; color: #3498db; font-size: 13px;">✅ Replied: <b>{rep}</b></p>
                         <p style="margin: 2px 0; color: #e74c3c; font-size: 13px;">✉️ Not Replied: <b>{not_rep}</b></p>
                         <p style="margin: 2px 0; color: {'#ff4b4b' if oot > 0 else '#2ecc71'}; font-size: 13px;">🚨 TL Over: <b>{oot}</b></p>
@@ -465,7 +482,6 @@ if module == "📊 Time Limit (TL) Letters & Office Tiles":
   st.markdown("---")
   st.subheader("📋 Filtered Detailed Data Table")
   st.dataframe(filtered_df, use_container_width=True)
-
 # --- MODULE 2: JANSUNWAI TRACKER ---
 elif module == "📞 Jansunwai Tracker":
   st.header("📞 Jansunwai Grievance Management Gist")
