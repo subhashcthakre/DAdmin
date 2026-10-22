@@ -429,10 +429,10 @@ if module == "📊 Time Limit (TL) Letters & Office Tiles":
           border_color = "red" if oot > 0 or not_rep > 0 else "#2ecc71"
           st.markdown(
               f"""
-                    <div style="padding: 15px; border-radius: 8px; border: 2px solid {border_color}; background-color: #1e1e1e; margin-bottom: 15px;">
-                        <h4 style="margin: 0; color: #ffffff; font-size: 16px;">{off_name}</h4>
-                        <hr style="margin: 5px 0 8px 0; border-color: #444;">
-                        <p style="margin: 2px 0; color: #cfcfcf; font-size: 13px;">📦 Total Cases: <b>{tot}</b></p>
+                    <div style="padding: 15px; border-radius: 8px; border: 2px solid {border_color}; margin-bottom: 15px;">
+                        <h4 style="margin: 0; font-size: 16px;">{off_name}</h4>
+                        <hr style="margin: 5px 0 8px 0; border-color: #888;">
+                        <p style="margin: 2px 0; font-size: 13px;">📦 Total Cases: <b>{tot}</b></p>
                         <p style="margin: 2px 0; color: #2ecc71; font-size: 13px;">🎯 Disposed: <b>{disp}</b></p>
                         <p style="margin: 2px 0; color: #3498db; font-size: 13px;">✅ Replied: <b>{rep}</b></p>
                         <p style="margin: 2px 0; color: #e74c3c; font-size: 13px;">✉️ Not Replied: <b>{not_rep}</b></p>
