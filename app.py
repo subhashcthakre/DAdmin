@@ -1,3 +1,4 @@
+import os
 import io
 import pandas as pd
 import streamlit as st
@@ -11,7 +12,7 @@ st.set_page_config(
     layout="wide",
 )
 
-# --- UPLOAD ADMIN CONFIGURATION (केवल अधिकृत यूज़र ही अपलोड कर सकेंगे) ---
+# --- UPLOAD ADMIN CONFIGURATION ---
 ADMIN_UPL_EMAILS = [
     "loksevabalaghat@gmail.com",
     "dmbalaghat@nic.in",
@@ -215,57 +216,63 @@ module = st.sidebar.radio(
     ],
 )
 
-# --- SESSION STATE DEFAULT DATA ---
+# --- PERMANENT STORAGE FILE PATH ---
+DATA_FILE = "latest_tl_data.csv"
+
+# Load persistent data if exists, otherwise load sample data
 if "tl_df" not in st.session_state:
-  sample_data = {
-      "S.No": [1, 2, 3, 4, 5, 6, 7, 8],
-      "Sub-Division": [
-          "Balaghat",
-          "Balaghat",
-          "Katangi",
-          "Balaghat",
-          "Baihar",
-          "Waraseoni",
-          "Kirnapur",
-          "Lanji",
-      ],
-      "Tahsil": [
-          "Balaghat",
-          "Balaghat",
-          "Katangi",
-          "Balaghat",
-          "Baihar",
-          "Waraseoni",
-          "Kirnapur",
-          "Lanji",
-      ],
-      "Block": [
-          "Balaghat",
-          "Balaghat",
-          "Katangi",
-          "Balaghat",
-          "Baihar",
-          "Waraseoni",
-          "Kirnapur",
-          "Lanji",
-      ],
-      "Name of Office": [
-          "ADM",
-          "CEO ZP BALAGHAT",
-          "CMHO",
-          "po duda",
-          "SDM_Baihar",
-          "SDM_Waraseoni",
-          "SE MPEB",
-          "TD_Lanji",
-      ],
-      "Received Letters": [120, 95, 150, 60, 45, 80, 110, 70],
-      "Disposed Letters": [100, 85, 120, 50, 40, 65, 90, 55],
-      "Pending Letters": [20, 10, 30, 10, 5, 15, 20, 15],
-      "Not Replied Letters": [5, 2, 8, 3, 1, 4, 6, 5],
-      "Out of Time Limit": [3, 1, 5, 2, 0, 3, 4, 2],
-  }
-  st.session_state.tl_df = pd.DataFrame(sample_data)
+  if os.path.exists(DATA_FILE):
+    st.session_state.tl_df = pd.read_csv(DATA_FILE)
+  else:
+    sample_data = {
+        "S.No": [1, 2, 3, 4, 5, 6, 7, 8],
+        "Sub-Division": [
+            "Balaghat",
+            "Balaghat",
+            "Katangi",
+            "Balaghat",
+            "Baihar",
+            "Waraseoni",
+            "Kirnapur",
+            "Lanji",
+        ],
+        "Tahsil": [
+            "Balaghat",
+            "Balaghat",
+            "Katangi",
+            "Balaghat",
+            "Baihar",
+            "Waraseoni",
+            "Kirnapur",
+            "Lanji",
+        ],
+        "Block": [
+            "Balaghat",
+            "Balaghat",
+            "Katangi",
+            "Balaghat",
+            "Baihar",
+            "Waraseoni",
+            "Kirnapur",
+            "Lanji",
+        ],
+        "Name of Office": [
+            "ADM",
+            "CEO ZP BALAGHAT",
+            "CMHO",
+            "po duda",
+            "SDM_Baihar",
+            "SDM_Waraseoni",
+            "SE MPEB",
+            "TD_Lanji",
+        ],
+        "Received Letters": [120, 95, 150, 60, 45, 80, 110, 70],
+        "Disposed Letters": [100, 85, 120, 50, 40, 65, 90, 55],
+        "Pending Letters": [20, 10, 30, 10, 5, 15, 20, 15],
+        "Not Replied Letters": [5, 2, 8, 3, 1, 4, 6, 5],
+        "Out of Time Limit": [3, 1, 5, 2, 0, 3, 4, 2],
+    }
+    st.session_state.tl_df = pd.DataFrame(sample_data)
 
 if "jansunwai_df" not in st.session_state:
   js_data = {
@@ -279,7 +286,7 @@ if "jansunwai_df" not in st.session_state:
   }
   st.session_state.jansunwai_df = pd.DataFrame(js_data)
 
-# --- MODULE 1: TIME LIMIT (TL) LETTERS & REAL-TIME UPLOADER ---
+# --- MODULE 1: TIME LIMIT (TL) LETTERS & REAL-TIME PERMANENT UPLOADER ---
 if module == "📊 Time Limit (TL) Letters":
   st.header("📊 Time Limit (TL) Letters - Department Dashboard")
   st.markdown(
@@ -287,53 +294,47 @@ if module == "📊 Time Limit (TL) Letters":
       " out-of-time-limit files."
   )
 
-  # केवल Designated Admin के लिए अपलोड का विकल्प
   if role == "Admin":
     with st.expander(
         "📤 Real-Time Excel Uploader (Jan Akansha Portal Report)", expanded=True
     ):
       st.info(
-          f"🔒 Logged in as Upload Admin (`{current_user}`). You can upload the"
-          " official Excel report."
+          f"🔒 Logged in as Upload Admin (`{current_user}`). Uploaded data will"
+          " be saved permanently for all officers."
       )
       uploaded_file = st.file_uploader(
           "Upload Jan Akansha Excel File (.xlsx)", type=["xlsx", "xls"]
       )
       if uploaded_file is not None:
         try:
-          # Read Excel starting from header row
           raw_df = pd.read_excel(uploaded_file, header=1)
-          st.success("✅ Jan Akansha Report successfully uploaded and parsed!")
+          st.success("✅ Jan Akansha Report successfully parsed and saved!")
           st.dataframe(raw_df.head(5))
 
-          # Save to session state if columns match or process them
-          if "Present Office" in raw_df.columns or len(raw_df.columns) > 4:
-            st.session_state.uploaded_raw_df = raw_df
+          # Save permanently to server disk so all logged-in users see it
+          raw_df.to_csv(DATA_FILE, index=False)
+          st.session_state.tl_df = raw_df
+          st.success(
+              "🔄 Data successfully broadcasted to all district officer"
+              " dashboards!"
+          )
         except Exception as e:
           st.error(f"Error reading Excel file: {e}")
   else:
     st.info(
         "ℹ️ File upload is restricted to designated administrative accounts"
-        " only. You have full viewing and drill-down access."
+        " only. You are viewing the latest synchronized district data."
     )
 
   df = st.session_state.tl_df.copy()
-  df["Dispos %"] = (
-      (df["Disposed Letters"] / df["Received Letters"]) * 100
-  ).round(2)
-
-  col1, col2, col3, col4, col5 = st.columns(5)
-  col1.metric("Total Received", int(df["Received Letters"].sum()))
-  col2.metric("Total Disposed", int(df["Disposed Letters"].sum()))
-  col3.metric("Total Pending", int(df["Pending Letters"].sum()))
-  col4.metric("Not Replied", int(df["Not Replied Letters"].sum()))
-  col5.metric(
-      "Avg Disposal %", f"{df['Dispos %'].mean():.1f}%"
-  )
+  if "Disposed Letters" in df.columns and "Received Letters" in df.columns:
+    df["Dispos %"] = (
+        (df["Disposed Letters"] / df["Received Letters"]) * 100
+    ).round(2)
 
   st.markdown("---")
   search_office = st.text_input("🔍 Search Office / Department")
-  if search_office:
+  if search_office and "Name of Office" in df.columns:
     df = df[
         df["Name of Office"].str.contains(search_office, case=False, na=False)
     ]
