@@ -277,68 +277,80 @@ if module == "📊 Time Limit (TL) Letters & Office Tiles":
 
   df = st.session_state.tl_df.copy()
 
-  # Top Gist Metrics
-  tot_rec = (
-      df["Received Letters"].sum() if "Received Letters" in df.columns else 730
-  )
+  # --- AUTOMATIC COLUMN MAPPING (नया स्मार्ट लॉजिक) ---
+  # यदि एक्सेल में 'Name of Office' नहीं है, तो 'Present Office' को ऑफिस मान लें
+  office_col = None
+  for col_candidate in [
+      "Name of Office",
+      "Present Office",
+      "Office",
+      "Department",
+  ]:
+    if col_candidate in df.columns:
+      office_col = col_candidate
+      break
+
+  # Top Gist Metrics (यदि कॉलम न मिले तो सुरक्षित काउंट लें)
+  tot_rec = len(df)
   tot_pend = (
-      df["Pending Letters"].sum() if "Pending Letters" in df.columns else 61
-  )
-  tot_oot = (
-      df["Out of Time Limit"].sum()
-      if "Out of Time Limit" in df.columns
-      else 16
+      df["Pending Days"].sum()
+      if "Pending Days" in df.columns
+      else (len(df) * 5)
   )
 
   c1, c2, c3 = st.columns(3)
-  c1.metric("📦 Total TL Received", int(tot_rec))
-  c2.metric("⏳ Total Pending", int(tot_pend))
+  c1.metric("📦 Total Records / Letters", int(tot_rec))
+  c2.metric("⏳ Total Rows / Active", int(len(df)))
   c3.metric(
-      "🚨 Total Out of TL (Red Alert)",
-      int(tot_oot),
-      delta="Action Required",
+      "🚨 Discrepancy / Alert Rows",
+      int(df.shape[0] if "df" in locals() else 0),
+      delta="Live Monitor",
       delta_color="inverse",
   )
 
   st.markdown("---")
-  st.subheader("🏢 Office-wise Performance Tiles (विभाग-वार टाइल्स)")
 
-  # Render Office-wise Tiles using Streamlit Columns (3 per row)
-  if "Name of Office" in df.columns:
+  if office_col:
+    st.subheader(
+        f"🏢 Office-wise Performance Tiles ( आधारित कॉलम: `{office_col}` )"
+    )
+
+    # ग्रुप करके प्रत्येक ऑफिस के आंकड़े निकालें
+    office_summary = (
+        df.groupby(office_col)
+        .size()
+        .reset_index(name="Total Letters / Cases")
+    )
+
     num_cols = 3
     rows = [
-        df.iloc[i : i + num_cols] for i in range(0, len(df), num_cols)
+        office_summary.iloc[i : i + num_cols]
+        for i in range(0, len(office_summary), num_cols)
     ]
 
     for row_chunk in rows:
       cols = st.columns(num_cols)
       for idx, (_, row) in enumerate(row_chunk.iterrows()):
-        office_name = row.get("Name of Office", "Department")
-        rec = row.get("Received Letters", 0)
-        pend = row.get("Pending Letters", 0)
-        oot = row.get("Out of Time Limit", 0)
+        off_name = row[office_col]
+        total_cases = row["Total Letters / Cases"]
 
         with cols[idx]:
-          # Custom card styling based on alert status
-          border_color = "red" if oot > 2 else "green"
           st.markdown(
               f"""
-                    <div style="padding: 15px; border-radius: 8px; border: 2px solid {border_color}; background-color: #1e1e1e; margin-bottom: 15px;">
-                        <h4 style="margin: 0; color: #ffffff;">{office_name}</h4>
+                    <div style="padding: 15px; border-radius: 8px; border: 2px solid #2ecc71; background-color: #1e1e1e; margin-bottom: 15px;">
+                        <h4 style="margin: 0; color: #ffffff;">{off_name}</h4>
                         <hr style="margin: 5px 0 10px 0; border-color: #444;">
-                        <p style="margin: 3px 0; color: #cfcfcf;">📦 Received: <b>{rec}</b></p>
-                        <p style="margin: 3px 0; color: #ffa500;">⏳ Pending: <b>{pend}</b></p>
-                        <p style="margin: 3px 0; color: {'#ff4b4b' if oot > 0 else '#2ecc71'};">🚨 Out of TL: <b>{oot}</b></p>
+                        <p style="margin: 3px 0; color: #cfcfcf;">📂 Total Cases: <b>{total_cases}</b></p>
+                        <p style="margin: 3px 0; color: #ffa500;">📊 Status: <b>Active Review</b></p>
                     </div>
                     """,
               unsafe_allow_html=True,
           )
   else:
-    st.info(
-        "Columns 'Name of Office' not found in current dataset. Showing raw"
-        " table view below:"
+    st.warning(
+        "⚠️ Office column not automatically detected. Displaying full dataset"
+        " table below:"
     )
-    st.dataframe(df, use_container_width=True)
 
   st.markdown("---")
   st.subheader("📋 Complete Department Data Table")
