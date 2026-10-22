@@ -225,48 +225,21 @@ if "tl_df" not in st.session_state:
     st.session_state.tl_df = pd.read_csv(DATA_FILE)
   else:
     sample_data = {
-        "S.No": [1, 2, 3, 4, 5, 6, 7, 8],
+        "S.No": [1, 2, 3, 4],
         "Present Office": [
             "CMHO (Health)",
             "DEO (Education)",
             "CEO ZP Balaghat",
             "EE PWD",
-            "EE PHE",
-            "EE RES",
-            "DPO WCD",
-            "DDA Agriculture",
         ],
-        "Marked Date": [
-            "10/01/2026",
-            "15/02/2026",
-            "01/03/2026",
-            "20/01/2026",
-            "10/02/2026",
-            "05/03/2026",
-            "15/01/2026",
-            "01/02/2026",
-        ],
-        "TL Date": [
-            "25/01/2026",
-            "28/02/2026",
-            "15/03/2026",
-            "05/02/2026",
-            "25/02/2026",
-            "20/03/2026",
-            "01/02/2026",
-            "15/02/2026",
-        ],
+        "Marked Date": ["10/09/2026", "15/09/2026", "01/10/2026", "20/09/2026"],
+        "TL Date": ["25/09/2026", "28/09/2026", "15/10/2026", "05/10/2026"],
         "Status": [
-            "Repliedok",
             "Not Replied",
-            "Replieddone",
-            "Not Replied",
-            "Repliedok",
-            "Not Replied",
-            "Repliedok",
-            "Not Replied",
+            "RepliedOK",
+            "Disposed by Collector",
+            "Replied - Reverted to Dept",
         ],
-        "Time Limit Over Cases": [0, 1, 0, 1, 0, 0, 1, 0],
     }
     st.session_state.tl_df = pd.DataFrame(sample_data)
 
@@ -312,7 +285,7 @@ if module == "📊 Time Limit (TL) Letters & Office Tiles":
   with col_d1:
     from_date = st.date_input(
         "📅 From Date (कब से देखना है):",
-        value=datetime.date(2026, 1, 1),
+        value=datetime.date(2026, 9, 1),
         format="YYYY-MM-DD",
     )
   with col_d2:
@@ -345,26 +318,36 @@ if module == "📊 Time Limit (TL) Letters & Office Tiles":
       f" Filtered Records: `{len(filtered_df)}`"
   )
 
-  # --- AUTOMATIC STATUS & TL OVER CALCULATION (अचूक लॉजिक) ---
+  # --- PERFECT LIFE-CYCLE PARSING LOGIC ---
   if office_col:
-    # 1. Status Check (Replied vs Not Replied)
-    if "Status" in filtered_df.columns:
-      filtered_df["Is_Replied"] = (
-          filtered_df["Status"].astype(str).str.startswith("Replied", na=False)
-      )
-      filtered_df["Is_Not_Replied"] = (
-          filtered_df["Status"]
-          .astype(str)
-          .str.contains("Not Replied", case=False, na=False)
-      )
-    else:
-      filtered_df["Is_Replied"] = False
-      filtered_df["Is_Not_Replied"] = True
+    # Status column analysis
+    status_series = (
+        filtered_df["Status"].astype(str)
+        if "Status" in filtered_df.columns
+        else pd.Series([""] * len(filtered_df))
+    )
 
-    # 2. Disposed Check (यदि स्टेटस में Replied है या कोई अन्य कॉलम है)
-    filtered_df["Is_Disposed"] = filtered_df["Is_Replied"]
+    # 1. Disposed: जब कलेक्टर द्वारा डिस्पोज किया गया हो
+    filtered_df["Is_Disposed"] = status_series.str.contains(
+        "Disposed|Closed|Resolved", case=False, na=False
+    )
 
-    # 3. TL Over Check: यदि TL Date आज से पहले की है और केस Not Replied है
+    # 2. Replied: जब स्टेटस की शुरुआत Replied से हो (या रिप्लाई आ चुका हो)
+    filtered_df["Is_Replied"] = status_series.str.startswith(
+        "Replied", na=False
+    ) | status_series.str.contains("Replied", case=False, na=False)
+
+    # 3. Not Replied: जब स्पष्ट रूप से Not Replied हो
+    filtered_df["Is_Not_Replied"] = status_series.str.contains(
+        "Not Replied", case=False, na=False
+    ) | (~filtered_df["Is_Replied"] & ~filtered_df["Is_Disposed"])
+
+    # 4. Pending to Dispose: जब रिप्लाई आ गया है लेकिन अभी तक कलेक्टर द्वारा डिस्पोज नहीं हुआ है
+    filtered_df["Is_Pending_To_Dispose"] = (
+        filtered_df["Is_Replied"] & ~filtered_df["Is_Disposed"]
+    )
+
+    # 5. Time Limit Over: यदि TL Date निकल चुकी है और केस अभी तक Not Replied है (Disposed नहीं हुआ)
     today_date = datetime.date.today()
     if "TL Date" in filtered_df.columns:
       filtered_df["Parsed_TL_Date"] = pd.to_datetime(
@@ -372,26 +355,22 @@ if module == "📊 Time Limit (TL) Letters & Office Tiles":
       ).dt.date
       filtered_df["Is_TL_Over"] = (
           filtered_df["Parsed_TL_Date"] < today_date
-      ) & filtered_df["Is_Not_Replied"]
+      ) & ~filtered_df["Is_Disposed"] & filtered_df["Is_Not_Replied"]
     else:
       filtered_df["Is_TL_Over"] = False
 
-    # ऑफिस-वाइज ग्रुपिंग और समरी
+    # ऑफिस-वाइज समरी ग्रुपिंग
     office_summary = (
         filtered_df.groupby(office_col)
         .agg(
             Total_Cases=(office_col, "count"),
             Disposed_Cases=("Is_Disposed", "sum"),
+            Pending_To_Dispose=("Is_Pending_To_Dispose", "sum"),
             Replied_Cases=("Is_Replied", "sum"),
             Not_Replied_Cases=("Is_Not_Replied", "sum"),
             TL_Over=("Is_TL_Over", "sum"),
         )
         .reset_index()
-    )
-
-    # नियम: Pending to Dispose = Total Cases - Disposed Cases
-    office_summary["Pending_To_Dispose"] = (
-        office_summary["Total_Cases"] - office_summary["Disposed_Cases"]
     )
   else:
     office_summary = pd.DataFrame()
@@ -422,7 +401,7 @@ if module == "📊 Time Limit (TL) Letters & Office Tiles":
       office_summary["TL_Over"].sum() if not office_summary.empty else 0
   )
 
-  # Top Gist Metrics Cards (अब इसमें 'Pending to Dispose' और सही 'TL Over' दिखेगा)
+  # Top Gist Metrics Cards
   m1, m2, m3, m4, m5, m6 = st.columns(6)
   m1.metric("📦 Total", int(total_cases_sum))
   m2.metric("🎯 Disposed", int(total_disposed_sum))
@@ -482,6 +461,7 @@ if module == "📊 Time Limit (TL) Letters & Office Tiles":
   st.markdown("---")
   st.subheader("📋 Filtered Detailed Data Table")
   st.dataframe(filtered_df, use_container_width=True)
+
 # --- MODULE 2: JANSUNWAI TRACKER ---
 elif module == "📞 Jansunwai Tracker":
   st.header("📞 Jansunwai Grievance Management Gist")
